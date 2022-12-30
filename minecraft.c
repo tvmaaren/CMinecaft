@@ -1,5 +1,6 @@
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_image.h>
+#include <allegro5/allegro_font.h>
 #include <allegro5/allegro_primitives.h>
 
 #include <math.h>
@@ -9,9 +10,10 @@
 
 #include "list.h"
 
-#define FRAMERATE 60
+#define FRAMERATE 60.0
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
+#define SIZE_BLOCK 8
 
 
 
@@ -21,10 +23,14 @@ typedef struct{
 typedef Pos Vec;
 #define ADD_VEC(v,w) {v.x+w.x,v.y+w.y,v.z+w.z}
 
+#define SPEED 5.0
+#define GRAVITY -0.5
 typedef struct{
 	float hor_angle;
 	float vert_angle;
 	Pos pos;
+	bool falling;
+	float vert_speed;//only used when falling
 }Player;
 
 
@@ -87,7 +93,7 @@ typedef struct{
 	Pos pos;
 }Block;
 
-Block blocks[] ={{COBBLESTONE_BLOCK,{0,0,0}}};
+Block blocks[] ={{COBBLESTONE_BLOCK,{0,-3,0}}};
 List block_list;
 
 #define LEN_BLOCKS sizeof(blocks)/sizeof(Block)
@@ -126,45 +132,45 @@ static void draw_block(Block block,Player* player)
 	ALLEGRO_VERTEX faces[6][4]={{
 	        //top
 	/*   x   y   z   u   v  c  */
-	   { 1,  1, 0,  0,  0, SIDE_COLOR(Top)},//1
-	   { 1,  1,  1, 16,  0, SIDE_COLOR(Top)},//2
-	   {0,  1, 0,  0, 16, SIDE_COLOR(Top)},//0
-	   {0,  1,  1, 16, 16, SIDE_COLOR(Top)},//3
+	   { SIZE_BLOCK,  SIZE_BLOCK, 0,  0,  0, SIDE_COLOR(Top)},//1
+	   { SIZE_BLOCK,  SIZE_BLOCK,  SIZE_BLOCK, 16,  0, SIDE_COLOR(Top)},//2
+	   {0,  SIZE_BLOCK, 0,  0, 16, SIDE_COLOR(Top)},//0
+	   {0,  SIZE_BLOCK,  SIZE_BLOCK, 16, 16, SIDE_COLOR(Top)},//3
 	},{
 	        //bottem
 	/*   x   y   z   u   v  c  */
 	   {0, 0, 0,  0,  0, SIDE_COLOR(Bottem)},//4
-	   {0, 0,  1, 16,  0, SIDE_COLOR(Bottem)},//7
-	   { 1, 0, 0,  0, 16, SIDE_COLOR(Bottem)},//5
-	   { 1, 0,  1, 16, 16, SIDE_COLOR(Bottem)},//6
+	   {0, 0,  SIZE_BLOCK, 16,  0, SIDE_COLOR(Bottem)},//7
+	   { SIZE_BLOCK, 0, 0,  0, 16, SIDE_COLOR(Bottem)},//5
+	   { SIZE_BLOCK, 0,  SIZE_BLOCK, 16, 16, SIDE_COLOR(Bottem)},//6
 	},{
 	        //west
 	/*   x   y   z   u   v  c  */
-	   {0,  1, 0,  0,  0, SIDE_COLOR(West)},//0
+	   {0,  SIZE_BLOCK, 0,  0,  0, SIDE_COLOR(West)},//0
 	   {0, 0, 0,  0, 16, SIDE_COLOR(West)},//4
-	   {0,  1,  1, 16,  0, SIDE_COLOR(West)},//3
-	   {0, 0,  1, 16, 16, SIDE_COLOR(West)},//7
+	   {0,  SIZE_BLOCK,  SIZE_BLOCK, 16,  0, SIDE_COLOR(West)},//3
+	   {0, 0,  SIZE_BLOCK, 16, 16, SIDE_COLOR(West)},//7
 	},{
 	        //east
 	/*   x   y   z   u   v  c  */
-	   { 1, 0, 0,16,16, SIDE_COLOR(East)},//5
-	   { 1,  1, 0,16,0, SIDE_COLOR(East)},//1
-	   { 1, 0,  1,0,16, SIDE_COLOR(East)},//6
-	   { 1,  1,  1,0,0, SIDE_COLOR(East)},//2
+	   { SIZE_BLOCK, 0, 0,16,16, SIDE_COLOR(East)},//5
+	   { SIZE_BLOCK,  SIZE_BLOCK, 0,16,0, SIDE_COLOR(East)},//1
+	   { SIZE_BLOCK, 0,  SIZE_BLOCK,0,16, SIDE_COLOR(East)},//6
+	   { SIZE_BLOCK,  SIZE_BLOCK,  SIZE_BLOCK,0,0, SIDE_COLOR(East)},//2
 	},{
 	        //south
 	/*   x   y   z   u   v  c  */
-	   {0,  1,  1,  0,  0, SIDE_COLOR(South)},//3
-	   { 1,  1,  1, 16,  0, SIDE_COLOR(South)},//2
-	   {0, 0,  1,  0, 16, SIDE_COLOR(South)},//7
-	   { 1, 0,  1, 16, 16, SIDE_COLOR(South)},//6
+	   {0,  SIZE_BLOCK,  SIZE_BLOCK,  0,  0, SIDE_COLOR(South)},//3
+	   { SIZE_BLOCK,  SIZE_BLOCK,  SIZE_BLOCK, 16,  0, SIDE_COLOR(South)},//2
+	   {0, 0,  SIZE_BLOCK,  0, 16, SIDE_COLOR(South)},//7
+	   { SIZE_BLOCK, 0,  SIZE_BLOCK, 16, 16, SIDE_COLOR(South)},//6
 	},{
 	        //north
 	/*   x   y   z   u   v  c  */
-	   {0,  1, 0,  0,  0, SIDE_COLOR(North)},//0
-	   { 1,  1, 0, 16,  0, SIDE_COLOR(North)},//1
+	   {0,  SIZE_BLOCK, 0,  0,  0, SIDE_COLOR(North)},//0
+	   { SIZE_BLOCK,  SIZE_BLOCK, 0, 16,  0, SIDE_COLOR(North)},//1
 	   {0, 0, 0,  0, 16, SIDE_COLOR(North)},//4
-	   { 1, 0, 0, 16, 16, SIDE_COLOR(North)},//5
+	   { SIZE_BLOCK, 0, 0, 16, 16, SIDE_COLOR(North)},//5
 	}};
 	
 	
@@ -174,7 +180,9 @@ static void draw_block(Block block,Player* player)
 	};
 	ALLEGRO_TRANSFORM t;
 	al_identity_transform(&t);
-	al_translate_transform_3d(&t, block.pos.x, block.pos.y, -block.pos.z-1);
+	al_translate_transform_3d(&t, block.pos.x*SIZE_BLOCK,
+			block.pos.y*SIZE_BLOCK,
+			-block.pos.z*SIZE_BLOCK-SIZE_BLOCK);
 	al_use_transform(&t);
 	for(int i=0;i<6;i++){
 		//If the side shouldn't be visible there is no point
@@ -199,15 +207,16 @@ void draw_map(Player* p)
 
 void set_perspective_transform(ALLEGRO_BITMAP* bmp,Player player)
 {
-   ALLEGRO_TRANSFORM p;
-   float aspect_ratio = (float)al_get_bitmap_height(bmp) / al_get_bitmap_width(bmp);
-   al_set_target_bitmap(bmp);
-   al_identity_transform(&p);
-   al_translate_transform_3d(&p,-player.pos.x,-player.pos.y,player.pos.z);
+	ALLEGRO_TRANSFORM p;
+	float aspect_ratio = (float)al_get_bitmap_height(bmp) / al_get_bitmap_width(bmp);
+	al_set_target_bitmap(bmp);
+	al_identity_transform(&p);
+	al_translate_transform_3d(&p, -player.pos.x*SIZE_BLOCK,
+		   -player.pos.y*SIZE_BLOCK, player.pos.z*SIZE_BLOCK);
 	al_rotate_transform_3d(&p,0,1,0,player.hor_angle);
 	al_rotate_transform_3d(&p,1,0,0,player.vert_angle);
-   al_perspective_transform(&p, -1, aspect_ratio, 1, 1, -aspect_ratio, 1000);
-   al_use_projection_transform(&p);
+	al_perspective_transform(&p, -1, aspect_ratio, 1, 1, -aspect_ratio, 1000);
+	al_use_projection_transform(&p);
 }
 
 void loadBlocks(){
@@ -236,13 +245,27 @@ void loadBlocks(){
 }
 
 
-void move(float step, Player* p,float angle){
+bool isValidPlayerPos(Pos pos){
+	Pos pos_low=pos;
+	pos_low.y--;
+	return(is_block(pos_low)==INT_MAX//Checks if the lower part of the player's body is
+					 //in a valid position
+			&& is_block(pos)==INT_MAX);
+}
+
+
+void move(float step, Player* p,float angle,bool checkValid){
 	float x = cos(p->hor_angle+angle);
 	float y = sin(p->hor_angle+angle);
 	Pos new_pos = p->pos;
+	Pos new_pos_extra = p->pos;
 	new_pos.z+=step*x;
 	new_pos.x+=step*y;
-	if(is_block(new_pos)==INT_MAX)
+	
+	new_pos_extra.z+=(step+0.1)*x;
+	new_pos_extra.x+=(step+0.1)*y;
+
+	if(!checkValid ||  isValidPlayerPos(new_pos_extra))
 		p->pos=new_pos;
 }
 
@@ -280,6 +303,13 @@ int ray_block_from_player(Direction* dir,Player p){
 	return(ray_block(dir, v,p.pos));
 }
 
+//Gives the distance of x to [a,b] where a<=b
+float distanceInterval(float x,float a,float b){
+	if(x<=a)return(a-x);
+	else if(b<=x)return(x-b);
+	else return(0);
+}
+
 
 int main(int argc, char **argv)
 {
@@ -290,14 +320,19 @@ int main(int argc, char **argv)
 	ALLEGRO_BITMAP *bottem;
 	ALLEGRO_BITMAP *top;
 	ALLEGRO_BITMAP *side;
+   	ALLEGRO_FONT* font;
 	
 	
-	Player player={0,0,{0,0,0}};
+	Player player={0,0,{0,0,0},true,0};
 	bool redraw = false;
 	bool quit = false;
 	bool fullscreen = false;
 	bool background = false;
 	int display_flags = ALLEGRO_RESIZABLE;
+
+	const char walkingStr[] ="Walking";
+	const char flyingStr[] = "Flying";
+	bool flying = false;
 	
 	
 	if (!al_init()) {
@@ -306,6 +341,8 @@ int main(int argc, char **argv)
 	}
 	al_init_image_addon();
 	loadBlocks();
+   	al_init_font_addon();
+	font = al_create_builtin_font();
 	
 	ALLEGRO_FILE* f = al_fopen("world.bin","r");
 	if(f){
@@ -317,6 +354,7 @@ int main(int argc, char **argv)
 		block_list.used=len_blocks;
 		block_list.l=block_listt;
 	}else block_list = list_init_with(sizeof(Block)*LEN_BLOCKS,blocks);
+	int standig_on = INT_MAX;
 	al_init_primitives_addon();
 	al_install_keyboard();
 	al_install_mouse();
@@ -352,6 +390,39 @@ int main(int argc, char **argv)
 	
 	al_start_timer(timer);
 	while (!quit) {
+		if(!flying){
+		Pos new_pos = player.pos;
+		new_pos.y+=player.vert_speed/FRAMERATE;
+
+		Pos foot;
+		foot=new_pos;
+		foot.y-=1.8;
+		int b= is_block(foot);
+		if(b==INT_MAX){
+			Pos prev_block_pos;
+			if(!player.falling)
+				prev_block_pos = ((Block*)block_list.l)[standig_on].pos;
+			if(player.falling
+				//check if the player is still standing on a block
+				|| distanceInterval(player.pos.x,prev_block_pos.x,
+					prev_block_pos.x+1.0)>0.5 
+				|| distanceInterval(player.pos.z,prev_block_pos.z,
+						prev_block_pos.z+1.0)>0.5){
+
+
+				player.falling=true;
+				player.pos.y+=player.vert_speed;
+			}
+		}
+		else{
+			if(b!=standig_on)printf("%d\n",b);
+			standig_on=b;
+			player.falling=false;
+			player.pos.y=ceilf(player.pos.y-1.8)+1.8;
+			player.vert_speed=0;
+		}
+		if(player.falling)player.vert_speed+=GRAVITY/FRAMERATE;
+		}
 		ALLEGRO_EVENT event;
 		
 		al_wait_for_event(queue, &event);
@@ -423,6 +494,9 @@ int main(int argc, char **argv)
 					case ALLEGRO_KEY_5:
 						block_selection=OAK_LOG_BLOCK;
 						break;
+					case ALLEGRO_KEY_K:
+						flying=!flying;
+						break;
 		      		}
 		      		break;
 			case ALLEGRO_EVENT_MOUSE_BUTTON_DOWN:
@@ -469,22 +543,24 @@ int main(int argc, char **argv)
 				break;
 			case ALLEGRO_EVENT_TIMER:
 				redraw = true;
-		      		if(key[ALLEGRO_KEY_W])move(20.0/FRAMERATE,&player,0);
+		      		if(key[ALLEGRO_KEY_W])move(SPEED/FRAMERATE,&player,0,!flying);
 		  		else if(key[ALLEGRO_KEY_S])
-		  			move(20.0/FRAMERATE,&player,ALLEGRO_PI);
-		  		else if(key[ALLEGRO_KEY_D])
-		  			move(20.0/FRAMERATE,&player,ALLEGRO_PI/2);
+		  			move(SPEED/FRAMERATE,&player,ALLEGRO_PI,!flying);
+		  		else if(key[ALLEGRO_KEY_D]){
+		  			move(SPEED/FRAMERATE,&player,ALLEGRO_PI/2,!flying);
+				}
 		  		else if(key[ALLEGRO_KEY_A])
-		  			move(20.0/FRAMERATE,&player,-ALLEGRO_PI/2);
+		  			move(SPEED/FRAMERATE,&player,-ALLEGRO_PI/2,!flying);
 		      		if(key[ALLEGRO_KEY_SPACE]){
-		  			Pos new_pos = player.pos;
-		      			new_pos.y+=20.0/FRAMERATE;
-		  			if(is_block(new_pos)==INT_MAX)player.pos=new_pos;
+					if(flying)player.pos.y+=20.0/FRAMERATE;
+					else{
+						if(player.falling)break;
+						player.falling=true;
+						player.vert_speed=0.3;
+					}
 		      		}
 		      		if(key[ALLEGRO_KEY_LSHIFT]||key[ALLEGRO_KEY_LSHIFT]){
-		  			Pos new_pos = player.pos;
-		      			new_pos.y-=20.0/FRAMERATE;
-		  			if(is_block(new_pos)==INT_MAX)player.pos=new_pos;
+					if(flying)player.pos.y-=20.0/FRAMERATE;
 		      		}
 		      		int i=0;
 		      		while(i < ALLEGRO_KEY_MAX){
@@ -522,6 +598,14 @@ int main(int argc, char **argv)
 			       		 al_get_bitmap_width(display_2d)/2+10,
 			       	 al_get_bitmap_height(display_2d)/2+10, al_map_rgb_f(1,
 			       		 1, 1), 2);
+			char info_str[100];
+			const char* walking_or_flyingStr;
+			if(flying)walking_or_flyingStr=flyingStr;
+			else walking_or_flyingStr=walkingStr;
+			sprintf(info_str, "Position: %f, %f, %f, (%s mode)", player.pos.x,
+					player.pos.y, player.pos.z,walking_or_flyingStr);
+         		al_draw_text(font, al_map_rgb_f(1, 1, 1), 0, 0, 0,
+                      		info_str);
 			
 			al_destroy_bitmap(display_2d);
 			
