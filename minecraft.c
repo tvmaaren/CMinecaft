@@ -8,256 +8,22 @@
 #include <stdlib.h>
 #include <limits.h>
 
+#include "types.h"
 #include "list.h"
+#include "block.h"
+#include "world.h"
 
 #define FRAMERATE 60.0
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
-#define SIZE_BLOCK 8
-
-//Amount of Chunks that should be loaded in every
-//direction
-#define WORLD_CHUNKS 1
-
-
-typedef struct{
-	float x,y,z;
-}Pos;
-typedef Pos Vec;
-
-#define ADD_VEC(v,w) (Pos){v.x+w.x,v.y+w.y,v.z+w.z}
-#define SCALAR_MUL_VEC(l,v) (Vec){l*v.x,l*v.y,l*v.z}
 
 #define SPEED 5.0
 #define GRAVITY -0.5
-typedef struct{
-	float hor_angle;
-	float vert_angle;
-	Pos pos;
-	unsigned int chunk_index;
-	bool falling;
-	float vert_speed;//only used when falling
-}Player;
-
-
-typedef enum {DIRT=0, GRASS_BLOCK_SIDE=1, GRASS_BLOCK_TOP=2, COBBLESTONE=3,
-	OAK_PLANKS=4, OAK_LOG=5, OAK_LOG_TOP=6,STONE=7} Texture;
-char* texturesStr[] = {"dirt.png", "grass_block_side.png",
-	"grass_block_top.png", "cobblestone.png", "oak_planks.png",
-	"oak_log.png", "oak_log_top.png","stone.png"};
-#define LEN_TEXTURES  sizeof(texturesStr)/sizeof(char*)
-ALLEGRO_BITMAP* texturesBMP[LEN_TEXTURES];
-
-typedef struct{
-		  uint8_t r,g,b;
-}Color;
-
-typedef struct{
-		  Texture texture;
-		  Color color;
-}BlockSidePreProcessing;
-
-//0:top, 1:bottem, 2:north, 3:west, 4:east, 5:south
-typedef BlockSidePreProcessing BlockTypePreProcessing[6];
-
-typedef struct{
-		  ALLEGRO_BITMAP* texture;
-		  ALLEGRO_COLOR color;
-}BlockSide;
-
-//0:top, 1:bottem, 2:north, 3:west, 4:east, 5:south
-typedef BlockSide BlockTypes[6];
-#define WHITE {255,255,255}
-
-typedef enum{AIR=UINT_MAX, GRASS_BLOCK=0, DIRT_BLOCK=1, COBBLESTONE_BLOCK=2,
-	OAK_PLANKS_BLOCK=3, OAK_LOG_BLOCK=4, STONE_BLOCK=5}BlockType;
-
-BlockTypePreProcessing blockTypesPreProcessing[] =
-{	
-	{/*grass_block*/{GRASS_BLOCK_TOP, {124,  189,  1}}, {DIRT, WHITE},
-	{GRASS_BLOCK_SIDE, WHITE}, {GRASS_BLOCK_SIDE, WHITE},
-	{GRASS_BLOCK_SIDE, WHITE}, {GRASS_BLOCK_SIDE, WHITE}}, 
-
-	{/*dirt_block*/{DIRT, WHITE}, {DIRT, WHITE}, {DIRT, WHITE}, {DIRT, WHITE},
-	{DIRT, WHITE}, {DIRT, WHITE}}, 
-
-	{/*cobblestone*/{COBBLESTONE, WHITE}, {COBBLESTONE, WHITE},
-		{COBBLESTONE, WHITE}, {COBBLESTONE, WHITE}, {COBBLESTONE, WHITE},
-		{COBBLESTONE, WHITE}}, 
-	{/*oak_planks*/{OAK_PLANKS, WHITE}, {OAK_PLANKS, WHITE}, {OAK_PLANKS, WHITE},
-	{OAK_PLANKS, WHITE}, {OAK_PLANKS, WHITE}, {OAK_PLANKS, WHITE}}, 
-
-	{/*oak_log*/{OAK_LOG_TOP, WHITE}, {OAK_LOG_TOP, WHITE}, {OAK_LOG, WHITE},
-	{OAK_LOG, WHITE}, {OAK_LOG, WHITE}, {OAK_LOG, WHITE}}, 
-
-	{/*stone_block*/{STONE,WHITE}, {STONE,WHITE}, {STONE,WHITE}, {STONE,WHITE},
-	{STONE, WHITE}, {STONE, WHITE}}
-};
-#define LEN_BLOCK_TYPES sizeof(blockTypesPreProcessing)/sizeof(BlockTypePreProcessing)
-
-BlockTypes blockTypes[LEN_BLOCK_TYPES];
-
-
-#define CHUNK_WIDTH 		16 //Depth and with of a chunk
-#define MAX_CHUNK_HEIGHT 	256
-#define MAX_CHUNK_BlOCKS 	(CHUNK_WIDTH*CHUNK_WIDTH*MAX_CHUNK_HEIGHT)
-
-typedef struct{
-	int x,z;
-}ChunkPos;	
-
-
-typedef struct{
-	unsigned int height;
-	ChunkPos pos;
-	List blocks;
-}Chunk;
 
 List world;
-#define AM_CHUNKS (world.used/sizeof(Chunk))
-#define worldl ((Chunk*)world.l)
-#define WORLD_BLOCK_INDEX(i)  ((BlockType*)(worldl[i/MAX_CHUNK_BlOCKS].blocks.l))[i%MAX_CHUNK_BlOCKS]
-#define FLOOR_I(f) (unsigned int)floorf(f)
-#define POS_TO_BLOCK_INDEX(pos) FLOOR_I(pos.x)%CHUNK_WIDTH*CHUNK_WIDTH + FLOOR_I(pos.y)*CHUNK_WIDTH*CHUNK_WIDTH + FLOOR_I(pos.z)%CHUNK_WIDTH
-#define CHUNK_POS_TO_BLOCK(chunk) (Pos){CHUNK_WIDTH*chunk.x,0,CHUNK_WIDTH*chunk.z}
-#define INDEX_TO_POS(i)  ((Pos)ADD_VEC(CHUNK_POS_TO_BLOCK(worldl[i/MAX_CHUNK_BlOCKS].pos),((Vec){i%(CHUNK_WIDTH*CHUNK_WIDTH)/CHUNK_WIDTH,i%MAX_CHUNK_BlOCKS/(CHUNK_WIDTH*CHUNK_WIDTH),i%CHUNK_WIDTH})))
-#define POS_TO_INDEX(pos,chunk) (getChunk(pos,chunk)*MAX_CHUNK_BlOCKS+POS_TO_BLOCK_INDEX(pos))
-
-bool isCorrectChunk(Pos p, unsigned int chunk_index){
-	ChunkPos chunk_pos = worldl[chunk_index].pos;
-	return(chunk_pos.x==floorf(p.x/CHUNK_WIDTH) && chunk_pos.z==floorf(p.z/CHUNK_WIDTH));
-}
-
-unsigned int getChunk(Pos p, unsigned int i){
-	if(i==UINT_MAX)i=AM_CHUNKS/2;
-	if(isCorrectChunk(p,i))return i;
-	for(unsigned int j=1;i+j<AM_CHUNKS||i>=j;j++){
-		if(i+j<AM_CHUNKS && isCorrectChunk(p,i+j))return i+j;
-		if(i>=j && isCorrectChunk(p,i-j))return i-j;
-	}
-	return UINT_MAX;
-}
 
 
-unsigned int is_block(Pos pos, unsigned int chunk_index){
-	//int i= (int)(floorf(pos.x)*WORLD_Y*WORLD_Z+floorf(pos.y)*WORLD_Z+floorf(pos.z));
-	//int chunk_index = POS_TO_CHUNK_INDEX(pos);
-	if(pos.y<0)return(UINT_MAX);
-	unsigned int block_index = POS_TO_BLOCK_INDEX(pos);
-	chunk_index = getChunk(pos,chunk_index);
-	if(chunk_index==UINT_MAX)return UINT_MAX;
-	Chunk c = worldl[chunk_index];
-	//if(c.type!=RENDERABLE||c.blocks[block_index]==AIR)return UINT_MAX;
-	if(c.height<=pos.y || ((BlockType*)c.blocks.l)[block_index]==AIR)return UINT_MAX;
-	return(chunk_index * MAX_CHUNK_BlOCKS + block_index);
-}
 
-typedef enum{Top=0,Bottem=1,West=2,East=3,South=4,North=5,NoDirection} Direction;
-Vec dirVectors[6]={{0,1,0},{0,-1,0},{-1,0,0},{1,0,0},{0,0,-1},{0,0,1}};
-
-bool lessThan(Direction dir, Pos p1, Pos p2){
-	switch(dir){
-		case Top: return(p1.y<p2.y);
-		case Bottem: return(p1.y>p2.y);
-		case West: return(p1.x>p2.x);
-		case East: return(p1.x<p2.x);
-		case South: return(p1.z>p2.z);
-		case North: return(p1.z<p2.z);
-	}
-}
-
-
-static void draw_block(BlockType type,unsigned int chunk_index,Pos pos,Player* player)
-{
-	if(type==AIR)return;
-	#define SIDE_COLOR(dir) (blockTypes[type][dir]).color
-	ALLEGRO_VERTEX faces[6][4]={{
-	        //top
-	/*   x   y   z   u   v  c  */
-	   { SIZE_BLOCK,  SIZE_BLOCK, 0,  0,  0, SIDE_COLOR(Top)},//1
-	   { SIZE_BLOCK,  SIZE_BLOCK,  SIZE_BLOCK, 16,  0, SIDE_COLOR(Top)},//2
-	   {0,  SIZE_BLOCK, 0,  0, 16, SIDE_COLOR(Top)},//0
-	   {0,  SIZE_BLOCK,  SIZE_BLOCK, 16, 16, SIDE_COLOR(Top)},//3
-	},{
-	        //bottem
-	/*   x   y   z   u   v  c  */
-	   {0, 0, 0,  0,  0, SIDE_COLOR(Bottem)},//4
-	   {0, 0,  SIZE_BLOCK, 16,  0, SIDE_COLOR(Bottem)},//7
-	   { SIZE_BLOCK, 0, 0,  0, 16, SIDE_COLOR(Bottem)},//5
-	   { SIZE_BLOCK, 0,  SIZE_BLOCK, 16, 16, SIDE_COLOR(Bottem)},//6
-	},{
-	        //west
-	/*   x   y   z   u   v  c  */
-	   {0,  SIZE_BLOCK, 0,  0,  0, SIDE_COLOR(West)},//0
-	   {0, 0, 0,  0, 16, SIDE_COLOR(West)},//4
-	   {0,  SIZE_BLOCK,  SIZE_BLOCK, 16,  0, SIDE_COLOR(West)},//3
-	   {0, 0,  SIZE_BLOCK, 16, 16, SIDE_COLOR(West)},//7
-	},{
-	        //east
-	/*   x   y   z   u   v  c  */
-	   { SIZE_BLOCK, 0, 0,16,16, SIDE_COLOR(East)},//5
-	   { SIZE_BLOCK,  SIZE_BLOCK, 0,16,0, SIDE_COLOR(East)},//1
-	   { SIZE_BLOCK, 0,  SIZE_BLOCK,0,16, SIDE_COLOR(East)},//6
-	   { SIZE_BLOCK,  SIZE_BLOCK,  SIZE_BLOCK,0,0, SIDE_COLOR(East)},//2
-	},{
-	        //south
-	/*   x   y   z   u   v  c  */
-	   {0,  SIZE_BLOCK,  SIZE_BLOCK,  0,  0, SIDE_COLOR(South)},//3
-	   { SIZE_BLOCK,  SIZE_BLOCK,  SIZE_BLOCK, 16,  0, SIDE_COLOR(South)},//2
-	   {0, 0,  SIZE_BLOCK,  0, 16, SIDE_COLOR(South)},//7
-	   { SIZE_BLOCK, 0,  SIZE_BLOCK, 16, 16, SIDE_COLOR(South)},//6
-	},{
-	        //north
-	/*   x   y   z   u   v  c  */
-	   {0,  SIZE_BLOCK, 0,  0,  0, SIDE_COLOR(North)},//0
-	   { SIZE_BLOCK,  SIZE_BLOCK, 0, 16,  0, SIDE_COLOR(North)},//1
-	   {0, 0, 0,  0, 16, SIDE_COLOR(North)},//4
-	   { SIZE_BLOCK, 0, 0, 16, 16, SIDE_COLOR(North)},//5
-	}};
-	
-	
-	int indices[6] = {
-	   0,1,3,
-	   0,2,3
-	};
-	ALLEGRO_TRANSFORM t;
-	al_identity_transform(&t);
-	al_translate_transform_3d(&t, pos.x*SIZE_BLOCK,
-			pos.y*SIZE_BLOCK,
-			-pos.z*SIZE_BLOCK-SIZE_BLOCK);
-	al_use_transform(&t);
-	for(int i=0;i<6;i++){
-		//If the side shouldn't be visible there is no point
-		//drawing it
-		if(lessThan(i,player->pos,pos))continue;
-
-		//only draw the face if there is no face next to it
-		Pos adjacent_block_pos = ADD_VEC(pos,dirVectors[i]);
-		if(is_block(adjacent_block_pos,chunk_index)==UINT_MAX)
-		al_draw_indexed_prim(faces[i], NULL,
-				(blockTypes[type][i]).texture,
-				indices, 6, ALLEGRO_PRIM_TRIANGLE_LIST);
-   	}
-}
-
-//#define INDEX_TO_POS(i) (Pos){i/(WORLD_Y*WORLD_Z),(i/WORLD_Z)%WORLD_Y,(i%WORLD_Y)%WORLD_Z}
-
-void draw_map(Player* p)
-{
-	for(unsigned int i=0;i<AM_CHUNKS;i++){
-		Chunk chunk = worldl[i];
-		BlockType* blocks = (BlockType*)chunk.blocks.l;
-		for(unsigned int j=0;j<chunk.height;j++){
-			for(unsigned int k=0;k<CHUNK_WIDTH*CHUNK_WIDTH;k++){
-				Pos pos = ADD_VEC(
-						(CHUNK_POS_TO_BLOCK(chunk.pos)),
-						((Vec){k/CHUNK_WIDTH,j,k%CHUNK_WIDTH})
-						);
-				draw_block(blocks[j*CHUNK_WIDTH*CHUNK_WIDTH+k],i,pos,p);
-			}
-		}
-	}
-}
 
 void set_perspective_transform(ALLEGRO_BITMAP* bmp,Player player)
 {
@@ -273,38 +39,14 @@ void set_perspective_transform(ALLEGRO_BITMAP* bmp,Player player)
 	al_use_projection_transform(&p);
 }
 
-void loadBlocks(){
-	bool success = al_change_directory("pics");
-	if(!success){
-		printf("Could not change directory");
-		exit(1);
-	}
-
-	for(unsigned int i=0;i<LEN_TEXTURES;i++){
-		texturesBMP[i]=al_load_bitmap(texturesStr[i]);
-		if(texturesBMP[i]==NULL){
-			printf("Could not load %s\n",texturesStr[i]);
-			exit(1);
-		}
-	}
-	al_change_directory("..");
-	for(unsigned int i=0;i<LEN_BLOCK_TYPES;i++){
-		for(unsigned int j=0;j<6;j++){
-			Texture t = blockTypesPreProcessing[i][j].texture;
-			Color c = blockTypesPreProcessing[i][j].color;
-			blockTypes[i][j].texture = texturesBMP[t];
-			blockTypes[i][j].color = al_map_rgb(c.r,c.g,c.b);
-		}
-	}
-}
 
 
 bool isValidPlayerPos(Pos pos, unsigned int chunk_index){
 	Pos pos_low=pos;
 	pos_low.y--;
-	return(is_block(pos_low,chunk_index)==UINT_MAX//Checks if the lower part of the player's body is
+	return(is_block(&world,pos_low,chunk_index)==UINT_MAX//Checks if the lower part of the player's body is
 					 //in a valid position
-			&& is_block(pos,chunk_index)==UINT_MAX);
+			&& is_block(&world,pos,chunk_index)==UINT_MAX);
 }
 
 
@@ -321,7 +63,7 @@ void move(float step, Player* p,float angle,bool checkValid){
 	new_pos_extra.x+=(step+0.1)*y;
 
 	//check if the chunk index is still correct
-	unsigned int new_chunk_index = getChunk(new_pos, p->chunk_index);
+	unsigned int new_chunk_index = getChunk(&world,new_pos, p->chunk_index);
 
 	if(!checkValid ||  isValidPlayerPos(new_pos_extra,new_chunk_index)){
 		p->pos=new_pos;
@@ -329,26 +71,14 @@ void move(float step, Player* p,float angle,bool checkValid){
 	}
 }
 
-
-Direction hitDirectionBlock(Pos prev_pos, Pos block_pos){
-	if(prev_pos.y>block_pos.y+1)return Top;
-	else if(prev_pos.y<block_pos.y)return Bottem;
-	else if(prev_pos.x<block_pos.x)return West;
-	else if(prev_pos.x>block_pos.x+1)return East;
-	else if(prev_pos.z<block_pos.z)return South;
-	else if(prev_pos.z>block_pos.z+1)return North;
-	else return NoDirection;
-}
-
-
 unsigned int ray_block(Direction* dir,Vec v,Pos pos,unsigned int chunk_index){
 	for(unsigned int i=0;i<100;i++){
 		Pos prev_pos = pos;
 		pos =(Pos)ADD_VEC(v,pos);
 		unsigned int ret;
-		if((ret=is_block(pos,chunk_index))!=UINT_MAX){
+		if((ret=is_block(&world,pos,chunk_index))!=UINT_MAX){
 			if(dir)*dir=hitDirectionBlock(prev_pos,
-					INDEX_TO_POS(ret));
+					INDEX_TO_POS(&world,ret));
 			return(ret);
 		}
 	}
@@ -361,52 +91,11 @@ unsigned int ray_block_from_player(Direction* dir,Player p,unsigned int chunk_in
 	return(ray_block(dir, v,p.pos,chunk_index));
 }
 
-void setBlock(int index, int chunk_index,BlockType type){
-	Pos pos = INDEX_TO_POS(index);
-	if(pos.y>MAX_CHUNK_HEIGHT ||  pos.y<0)return;
-	chunk_index =getChunk(pos,chunk_index);
-	Chunk* chunk = &(worldl[chunk_index]);
-	if(pos.y>=chunk->height){
-		//increase the height of the chunk
-		int increaseWith = pos.y-chunk->height+10;
-		BlockType justAir[increaseWith*CHUNK_WIDTH*CHUNK_WIDTH];
-		memset(justAir,AIR,sizeof(BlockType)*increaseWith*CHUNK_WIDTH*CHUNK_WIDTH);
-		list_concat(&(chunk->blocks),sizeof(BlockType)*increaseWith*CHUNK_WIDTH*CHUNK_WIDTH,justAir);
-		chunk->height+=increaseWith;
-	}
-	WORLD_BLOCK_INDEX(index) = type;
-}
-
 //Gives the distance of x to [a,b] where a<=b
 float distanceInterval(float x,float a,float b){
 	if(x<=a)return(a-x);
 	else if(b<=x)return(x-b);
 	else return(0);
-}
-
-Chunk renderChunk(ChunkPos pos){
-	Chunk ret = {10,pos,list_init(10*CHUNK_WIDTH*CHUNK_WIDTH*sizeof(BlockType))};
-	memset(ret.blocks.l,AIR,ret.blocks.used);
-	for(int i=0;i<4*CHUNK_WIDTH*CHUNK_WIDTH;i++){
-		((BlockType*)(ret.blocks.l))[i]=STONE_BLOCK;
-	}
-	for(int i=4*CHUNK_WIDTH*CHUNK_WIDTH;i<5*CHUNK_WIDTH*CHUNK_WIDTH;i++){
-			((BlockType*)(ret.blocks.l))[i]=GRASS_BLOCK;
-	}
-	return ret;
-}
-
-void loadChunks(Player p){
-	for(int i=-WORLD_CHUNKS;i<=WORLD_CHUNKS;i++){
-	for(int j=-WORLD_CHUNKS;j<=WORLD_CHUNKS;j++){
-		if(getChunk(ADD_VEC(((Pos){CHUNK_WIDTH*i,0,CHUNK_WIDTH*j}),(p.pos)),p.chunk_index)
-				==UINT_MAX){
-			list_append(&world,sizeof(Chunk));
-			worldl[AM_CHUNKS-1]=
-				renderChunk((ChunkPos){i+(int)p.pos.x/CHUNK_WIDTH,j+(int)p.pos.z/CHUNK_WIDTH});
-		}
-	}
-	}
 }
 
 
@@ -481,7 +170,7 @@ int main(int argc, char **argv)
 	
 	al_start_timer(timer);
 	while (!quit) {
-		loadChunks(player);
+		loadChunks(&world,player);
 
 		if(!flying){
 		Pos new_pos = player.pos;
@@ -490,13 +179,13 @@ int main(int argc, char **argv)
 		Pos foot;
 		foot=new_pos;
 		foot.y-=1.8;
-		unsigned int b= is_block(foot,player.chunk_index);
+		unsigned int b= is_block(&world,foot,player.chunk_index);
 		if(b==UINT_MAX){
 			Pos prev_block_pos;
 			if(!player.falling)
-				prev_block_pos = INDEX_TO_POS(standing_on);
+				prev_block_pos = INDEX_TO_POS(&world,standing_on);
 			if(	standing_on==UINT_MAX ||
-				WORLD_BLOCK_INDEX(standing_on)==AIR
+				WORLD_BLOCK_INDEX(&world,standing_on)==AIR
 				|| player.falling
 				//check if the player is still standing on a block
 				|| distanceInterval(player.pos.x,prev_block_pos.x,
@@ -600,20 +289,16 @@ int main(int argc, char **argv)
 				unsigned int block_index = ray_block_from_player(&dir,player,player.chunk_index);
 				if(block_index==UINT_MAX)break;
 				switch(event.mouse.button){
-					case 2://place block
-						//Pos new_pos=((Block*)block_list.l)
-						//	[block_index].pos;
+					case 2:
 						if(dir==NoDirection)break;
-						Pos block = INDEX_TO_POS(block_index);
-						int chunk_index = getChunk((ADD_VEC(INDEX_TO_POS(block_index), dirVectors[dir])),block_index/MAX_CHUNK_BlOCKS);
-						ChunkPos p =worldl[chunk_index].pos;
-						block_index = POS_TO_INDEX((ADD_VEC(INDEX_TO_POS(block_index), dirVectors[dir])), block_index/MAX_CHUNK_BlOCKS);
-						//TODO: Check if the new block doesn't go out of
-						setBlock(block_index,chunk_index,block_selection);
+						Pos block = INDEX_TO_POS(&world,block_index);
+						int chunk_index = getChunk(&world,adjacentPos(block,dir)/*(ADD_VEC(block, dirVectors[dir]))*/,block_index/MAX_CHUNK_BlOCKS);
+						ChunkPos p =worldl(&world)[chunk_index].pos;
+						block_index = POS_TO_INDEX((&world),adjacentPos(block,dir), block_index/MAX_CHUNK_BlOCKS);
+						setBlock(&world,block_index,chunk_index,block_selection);
 						break;
 					case 1://break block
-					        //WORLD_BLOCK_INDEX(block_index)=AIR;
-						setBlock(block_index,block_index/MAX_CHUNK_BlOCKS,AIR);
+						setBlock(&world,block_index,block_index/MAX_CHUNK_BlOCKS,AIR);
 						break;
 				}
 				break;
@@ -659,7 +344,7 @@ int main(int argc, char **argv)
 			al_set_render_state(ALLEGRO_DEPTH_TEST, 1);
 			al_clear_to_color(al_map_rgb_f(0, 0, 0));
 			al_clear_depth_buffer(1000);
-			draw_map(&player);
+			draw_world(&world,&player);
 			
 			display_2d = al_create_sub_bitmap(al_get_backbuffer(display), 0, 0,
 				al_get_display_width(display), al_get_display_height(display));
