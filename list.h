@@ -5,7 +5,7 @@ typedef struct{
 }List;
 
 
-List list_init();
+List list_init(size_t s);
 List list_init_with(size_t s,void* l);
 void list_free(List l);
 void list_append(List *l,size_t s);
