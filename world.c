@@ -2,6 +2,7 @@
 #include <allegro5/allegro_primitives.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "list.h"
 #include "types.h"
@@ -10,6 +11,25 @@
 #include "noise.c"
 #define AM_CHUNKS (world->used/sizeof(Chunk))
 
+void saveWorld(FILE* restrict stream, List* world){
+	fwrite(world,sizeof(List),1,stream);
+	fwrite(world->l,world->used,1,stream);
+	for(int i = 0; i<AM_CHUNKS;i++){
+		List* pBlocks = &worldl(world)[i].blocks;
+		fwrite(pBlocks->l,pBlocks->used,1,stream);
+	}
+}
+
+void loadWorld(FILE* restrict stream, List* world){
+	fread(world, sizeof(List), 1, stream);
+	world->l=malloc(world->available);
+	fread(world->l, world->used, 1, stream);
+	for(int i=0; i<AM_CHUNKS; i++){
+		List* pBlocks = &worldl(world)[i].blocks;
+		pBlocks->l = malloc(pBlocks->available);
+		fread(pBlocks->l,pBlocks->used,1,stream);
+	}
+}
 
 bool isCorrectChunk(List* world, ChunkPos p, unsigned int chunk_index){
 	ChunkPos chunk_pos = worldl(world)[chunk_index].pos;

@@ -107,6 +107,7 @@ float distanceInterval(float x,float a,float b){
 
 int main(int argc, char **argv)
 {
+
 	ALLEGRO_DISPLAY *display;
 	ALLEGRO_TIMER *timer;
 	ALLEGRO_EVENT_QUEUE *queue;
@@ -170,10 +171,16 @@ int main(int argc, char **argv)
 	unsigned char key[ALLEGRO_KEY_MAX];
 	memset(key, 0, sizeof(key));
 	
-	BlockTypeEnum block_selection=GRASS_BLOCK;
-	world= list_init(0);
+	FILE* f = fopen("world.bin","r");
+	if(f){
+		loadWorld(f,&world);
+	}else{
+		world= list_init(0);
+	}
 	for(int i =0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++)
 		worldMesh[i] = list_init(0);
+	
+	BlockTypeEnum block_selection=GRASS_BLOCK;
 	
 	loadChunks(&world,player);
 	createWorldMesh(&world,worldMesh,&player);
@@ -289,6 +296,11 @@ int main(int argc, char **argv)
 					case ALLEGRO_KEY_K:
 						player.vert_speed=0;
 						flying=!flying;
+						break;
+					case ALLEGRO_KEY_O:
+						FILE* f= fopen("world.bin","w");
+						saveWorld(f,&world);
+						fclose(f);
 						break;
 					case ALLEGRO_KEY_SPACE:
 						if(!flying){

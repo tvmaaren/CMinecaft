@@ -25,6 +25,8 @@ typedef struct{
 	List blocks;
 }Chunk;
 
+void saveWorld(FILE* restrict stream, List* world);
+void loadWorld(FILE* restrict stream, List* world);
 bool isCorrectChunk(List* world, ChunkPos p, unsigned int chunk_index);
 unsigned int getChunk(List* world, ChunkPos p, unsigned int i);
 unsigned int is_block(List* world,Pos pos, unsigned int chunk_index);
