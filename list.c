@@ -45,7 +45,4 @@ void list_concat(List *l,size_t s, void* p){
 	int used_prev = l->used;
 	list_append(l,s);
 	memcpy(l->l+used_prev,p,s);
-	//for(int i=used_prev;i<l->used;i++){
-	//	((char*)l->l)[i] = ((char*)p)[i-l->used];
-	//}
 }

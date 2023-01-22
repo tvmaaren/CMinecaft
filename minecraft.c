@@ -20,9 +20,9 @@
 #define SPEED 5.0
 #define GRAVITY -0.5
 
+
 List world;
-
-
+List worldMesh[(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1)];
 
 
 void set_perspective_transform(ALLEGRO_BITMAP* bmp,Player player)
@@ -52,6 +52,8 @@ bool isValidPlayerPos(Pos pos, unsigned int chunk_index){
 
 
 void move(float step, Player* p,float angle,bool checkValid){
+	int prevChunkIndex = p->chunk_index;
+
 	float x = cos(p->hor_angle+angle);
 	float y = sin(p->hor_angle+angle);
 	Pos new_pos = p->pos;
@@ -63,11 +65,15 @@ void move(float step, Player* p,float angle,bool checkValid){
 	new_pos_extra.x+=(step+0.1)*y;
 
 	//check if the chunk index is still correct
-	unsigned int new_chunk_index = getChunk(&world,new_pos, p->chunk_index);
+	unsigned int new_chunk_index = getChunk(&world,POS_TO_CHUNK_POS(new_pos), p->chunk_index);
 
 	if(!checkValid ||  isValidPlayerPos(new_pos_extra,new_chunk_index)){
 		p->pos=new_pos;
 		p->chunk_index=new_chunk_index;
+	}
+	if(prevChunkIndex!=p->chunk_index){
+		loadChunks(&world,*p);
+		reCreateWorldMesh(&world,worldMesh,p);
 	}
 }
 
@@ -111,7 +117,7 @@ int main(int argc, char **argv)
    	ALLEGRO_FONT* font;
 	
 	
-	Player player={0,0,{1000,25,1000},UINT_MAX,true,0};
+	Player player={0,0,{0,25,0},UINT_MAX,true,0};
 	bool redraw = false;
 	bool quit = false;
 	bool fullscreen = false;
@@ -164,13 +170,16 @@ int main(int argc, char **argv)
 	unsigned char key[ALLEGRO_KEY_MAX];
 	memset(key, 0, sizeof(key));
 	
-	BlockType block_selection=GRASS_BLOCK;
+	BlockTypeEnum block_selection=GRASS_BLOCK;
 	world= list_init(0);
+	for(int i =0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++)
+		worldMesh[i] = list_init(0);
 	
+	loadChunks(&world,player);
+	createWorldMesh(&world,worldMesh,&player);
 	
 	al_start_timer(timer);
 	while (!quit) {
-		loadChunks(&world,player);
 
 		if(!flying){
 		Pos new_pos = player.pos;
@@ -271,6 +280,12 @@ int main(int argc, char **argv)
 					case ALLEGRO_KEY_6:
 						block_selection=STONE_BLOCK;
 						break;
+					case ALLEGRO_KEY_7:
+						block_selection=OAK_LEAVES_BLOCK;
+						break;
+					case ALLEGRO_KEY_8:
+						block_selection=GLASS_BLOCK;
+						break;
 					case ALLEGRO_KEY_K:
 						player.vert_speed=0;
 						flying=!flying;
@@ -288,11 +303,11 @@ int main(int argc, char **argv)
 		      		Direction dir;
 				unsigned int block_index = ray_block_from_player(&dir,player,player.chunk_index);
 				if(block_index==UINT_MAX)break;
+				Pos block = INDEX_TO_POS(&world,block_index);
 				switch(event.mouse.button){
 					case 2:
 						if(dir==NoDirection)break;
-						Pos block = INDEX_TO_POS(&world,block_index);
-						int chunk_index = getChunk(&world,adjacentPos(block,dir)/*(ADD_VEC(block, dirVectors[dir]))*/,block_index/MAX_CHUNK_BlOCKS);
+						int chunk_index = getChunk(&world,POS_TO_CHUNK_POS(adjacentPos(block,dir))/*(ADD_VEC(block, dirVectors[dir]))*/,block_index/MAX_CHUNK_BlOCKS);
 						ChunkPos p =worldl(&world)[chunk_index].pos;
 						block_index = POS_TO_INDEX((&world),adjacentPos(block,dir), block_index/MAX_CHUNK_BlOCKS);
 						setBlock(&world,block_index,chunk_index,block_selection);
@@ -301,6 +316,14 @@ int main(int argc, char **argv)
 						setBlock(&world,block_index,block_index/MAX_CHUNK_BlOCKS,AIR);
 						break;
 				}
+				ChunkPos playerChunkPos = POS_TO_CHUNK_POS(player.pos);
+				ChunkPos blockChunkPos =POS_TO_CHUNK_POS(block);
+				int i = (blockChunkPos.x-playerChunkPos.x+WORLD_CHUNKS)*
+					(2*WORLD_CHUNKS+1)+
+					(blockChunkPos.z-playerChunkPos.z+WORLD_CHUNKS);
+				list_free(worldMesh[i]);
+				worldMesh[i]=list_init(0);
+				createChunkMesh(&world,&(worldMesh[i]),&player,i);
 				break;
 			case ALLEGRO_EVENT_TIMER:
 				redraw = true;
@@ -318,7 +341,7 @@ int main(int argc, char **argv)
 		      		if(key[ALLEGRO_KEY_LSHIFT]||key[ALLEGRO_KEY_LSHIFT]){
 					if(flying)player.pos.y-=20.0/FRAMERATE;
 		      		}
-		      		int i=0;
+		      		i=0;
 		      		while(i < ALLEGRO_KEY_MAX){
 		      			key[i] &= KEY_SEEN;
 		      			i++;
@@ -344,7 +367,7 @@ int main(int argc, char **argv)
 			al_set_render_state(ALLEGRO_DEPTH_TEST, 1);
 			al_clear_to_color(al_map_rgb_f(0, 0, 0));
 			al_clear_depth_buffer(1000);
-			draw_world(&world,&player);
+			draw_world(worldMesh,&player);
 			
 			display_2d = al_create_sub_bitmap(al_get_backbuffer(display), 0, 0,
 				al_get_display_width(display), al_get_display_height(display));
