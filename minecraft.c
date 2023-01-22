@@ -293,6 +293,9 @@ int main(int argc, char **argv)
 					case ALLEGRO_KEY_8:
 						block_selection=GLASS_BLOCK;
 						break;
+					case ALLEGRO_KEY_9:
+						block_selection=WATER_BLOCK;
+						break;
 					case ALLEGRO_KEY_K:
 						player.vert_speed=0;
 						flying=!flying;
@@ -306,7 +309,7 @@ int main(int argc, char **argv)
 						if(!flying){
 							if(player.falling)break;
 							player.falling=true;
-							player.vert_speed=0.3;
+							player.vert_speed=0.15;
 						}
 						break;
 		      		}

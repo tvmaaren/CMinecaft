@@ -10,6 +10,8 @@
 #include "world.h"
 #include "noise.c"
 #define AM_CHUNKS (world->used/sizeof(Chunk))
+#define WATER_LEVEL 15
+
 
 void saveWorld(FILE* restrict stream, List* world){
 	fwrite(world,sizeof(List),1,stream);
@@ -158,7 +160,8 @@ Chunk renderChunk(ChunkPos pos){
 	memset(ret.blocks.l,AIR,ret.blocks.used);
 	for(int i=0;i<CHUNK_WIDTH*CHUNK_WIDTH;i++){
 		int j;
-		for(j =i;j/(CHUNK_WIDTH*CHUNK_WIDTH)<levelfunc(CHUNK_WIDTH*pos.x+i/CHUNK_WIDTH,CHUNK_WIDTH*pos.z+i%CHUNK_WIDTH);j+=(CHUNK_WIDTH*CHUNK_WIDTH)){
+		int level = levelfunc(CHUNK_WIDTH*pos.x+i/CHUNK_WIDTH,CHUNK_WIDTH*pos.z+i%CHUNK_WIDTH);
+		for(j =i;j/(CHUNK_WIDTH*CHUNK_WIDTH)<level;j+=(CHUNK_WIDTH*CHUNK_WIDTH)){
 			((BlockTypeEnum*)(ret.blocks.l))[j]=STONE_BLOCK;
 		}
 		for(int k=0;k<3;k++){
@@ -166,7 +169,10 @@ Chunk renderChunk(ChunkPos pos){
 			j+=(CHUNK_WIDTH*CHUNK_WIDTH);
 		}
 		((BlockTypeEnum*)(ret.blocks.l))[j]=GRASS_BLOCK;
-		if(i==r){
+		for(;j<WATER_LEVEL*(CHUNK_WIDTH*CHUNK_WIDTH);j+=CHUNK_WIDTH*CHUNK_WIDTH){
+			((BlockTypeEnum*)(ret.blocks.l))[j]=WATER_BLOCK;
+		}
+		if(i==r&&level>WATER_LEVEL){
 			for(int k=0;k<3;k++){
 				j+=(CHUNK_WIDTH*CHUNK_WIDTH);
 				((BlockTypeEnum*)(ret.blocks.l))[j]=OAK_LOG_BLOCK;

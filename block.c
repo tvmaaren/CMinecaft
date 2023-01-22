@@ -45,8 +45,8 @@ BlockTypePreProcessing blockTypesPreProcessing[] =
 	{{/*glass_block*/{GLASS,WHITE}, {GLASS,WHITE}, {GLASS,WHITE}, {GLASS,WHITE},
 	{GLASS, WHITE}, {GLASS, WHITE}},true},
 	
-	{{/*water_block*/{WATER,WATER_BLUE}, {GLASS,WATER_BLUE}, {GLASS,WATER_BLUE}, {GLASS,WATER_BLUE},
-	{WATER, WATER_BLUE}, {GLASS, WATER_BLUE}},true}
+	{{/*water_block*/{WATER,WATER_BLUE}, {WATER,WATER_BLUE}, {WATER,WATER_BLUE}, {WATER,WATER_BLUE},
+	{WATER, WATER_BLUE}, {WATER, WATER_BLUE}},true}
 };
 #define LEN_BLOCK_TYPES sizeof(blockTypesPreProcessing)/sizeof(BlockTypePreProcessing)
 BlockType blockTypes[LEN_BLOCK_TYPES];
