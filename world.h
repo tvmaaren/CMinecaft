@@ -2,7 +2,7 @@
 //direction
 #define WORLD_CHUNKS 4
 
-#define CHUNK_WIDTH 		16 //Depth and with of a chunk
+#define CHUNK_WIDTH 		16 //Depth and width of a chunk
 #define MAX_CHUNK_HEIGHT 	256
 #define MAX_CHUNK_BlOCKS 	(CHUNK_WIDTH*CHUNK_WIDTH*MAX_CHUNK_HEIGHT)
 
@@ -23,6 +23,7 @@ typedef struct{
 	unsigned int height;
 	ChunkPos pos;
 	List blocks;
+	List mesh;
 }Chunk;
 
 void saveWorld(FILE* restrict stream, List* world);
@@ -30,10 +31,10 @@ void loadWorld(FILE* restrict stream, List* world);
 bool isCorrectChunk(List* world, ChunkPos p, unsigned int chunk_index);
 unsigned int getChunk(List* world, ChunkPos p, unsigned int i);
 unsigned int is_block(List* world,Pos pos, unsigned int chunk_index);
-void draw_world(List* world,Player* p);
+void draw_world(List* world,int* chunks_indices,Player *p);
 void setBlock(List* world, int index, int chunk_index,BlockTypeEnum type);
 Chunk renderChunk(ChunkPos pos);
-void loadChunks(List* world,Player p);
+void loadChunks(List* world,int* visibleChunks,Player p);
 void createWorldMesh(List* world,List* worldMesh,Player* p);
 void reCreateWorldMesh(List* world,List* worldMesh,Player* p);
-void createChunkMesh(List* world,List* chunkMesh,Player* p,int i);
+void createChunkMesh(List* world,Chunk* chunk,int chunkIndex);

@@ -17,12 +17,14 @@
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 
-#define SPEED 5.0
+#define WALKING_SPEED 5.0
+#define FLYING_SPEED 20.0
 #define GRAVITY -0.5
 
 
 List world;
-List worldMesh[(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1)];
+int visibleChunks[(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1)];
+
 
 
 void set_perspective_transform(ALLEGRO_BITMAP* bmp,Player player)
@@ -44,11 +46,22 @@ void set_perspective_transform(ALLEGRO_BITMAP* bmp,Player player)
 bool isValidPlayerPos(Pos pos, unsigned int chunk_index){
 	Pos pos_low=pos;
 	pos_low.y--;
-	return(is_block(&world,pos_low,chunk_index)==UINT_MAX//Checks if the lower part of the player's body is
-					 //in a valid position
+	return(is_block(&world,pos_low,chunk_index)==UINT_MAX
+					//Checks if the lower part of the player's body is
+					//in a valid position
 			&& is_block(&world,pos,chunk_index)==UINT_MAX);
 }
 
+
+
+void getVisibleChunks(int* visibleChunks,Player* p){
+	ChunkPos playerChunkPos = POS_TO_CHUNK_POS(p->pos);
+	for(int i=0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++){
+		ChunkPos chunkPos = {	playerChunkPos.x+(-WORLD_CHUNKS+i/(2*WORLD_CHUNKS+1)),
+					playerChunkPos.z+(-WORLD_CHUNKS+i%(2*WORLD_CHUNKS+1))};
+		visibleChunks[i]=getChunk(&world,chunkPos,p->chunk_index);
+	}
+}
 
 
 void move(float step, Player* p,float angle,bool checkValid){
@@ -72,8 +85,10 @@ void move(float step, Player* p,float angle,bool checkValid){
 		p->chunk_index=new_chunk_index;
 	}
 	if(prevChunkIndex!=p->chunk_index){
-		loadChunks(&world,*p);
-		reCreateWorldMesh(&world,worldMesh,p);
+		loadChunks(&world,visibleChunks,*p);
+		//getVisibleChunks(visibleChunks,p);
+
+		//reCreateWorldMesh(&world,p);
 	}
 }
 
@@ -135,7 +150,6 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 	al_init_image_addon();
-	loadBlocks();
    	al_init_font_addon();
 	font = al_create_builtin_font();
 	
@@ -177,13 +191,19 @@ int main(int argc, char **argv)
 	}else{
 		world= list_init(0);
 	}
-	for(int i =0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++)
-		worldMesh[i] = list_init(0);
+	//for(int i =0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++)
+	//	worldMesh[i] = list_init(0);
 	
-	BlockTypeEnum block_selection=GRASS_BLOCK;
+	loadBlocks();
+	int hotbarSelect = 0;
+	BlockTypeEnum hotbar[9];
+	for(int i=0;i<9;i++){
+		hotbar[i]=i;
+	}
+	BlockTypeEnum block_selection=DIRT_BLOCK;
 	
-	loadChunks(&world,player);
-	createWorldMesh(&world,worldMesh,&player);
+	loadChunks(&world,visibleChunks, player);
+	//createWorldMesh(&world,worldMesh,&player);
 	
 	al_start_timer(timer);
 	while (!quit) {
@@ -253,6 +273,10 @@ int main(int argc, char **argv)
 					if(player.vert_angle<-ALLEGRO_PI/2)
 						player.vert_angle=-ALLEGRO_PI/2;
 		      		}
+				hotbarSelect-=event.mouse.dz;
+				if(hotbarSelect<0)hotbarSelect=0;
+				if(hotbarSelect==9)hotbarSelect=8;
+				block_selection=hotbarSelect;
 				break;
 		  	case ALLEGRO_EVENT_KEY_UP:
 				key[event.keyboard.keycode] &= KEY_RELEASED;
@@ -271,30 +295,39 @@ int main(int argc, char **argv)
 						break;
 					case ALLEGRO_KEY_1:
 						block_selection=GRASS_BLOCK;
+						hotbarSelect = 0;
 						break;
 					case ALLEGRO_KEY_2:
 						block_selection=DIRT_BLOCK;
+						hotbarSelect = 1;
 						break;
 					case ALLEGRO_KEY_3:
 						block_selection=COBBLESTONE_BLOCK;
+						hotbarSelect = 2;
 						break;
 					case ALLEGRO_KEY_4:
 						block_selection=OAK_PLANKS_BLOCK;
+						hotbarSelect = 3;
 						break;
 					case ALLEGRO_KEY_5:
 						block_selection=OAK_LOG_BLOCK;
+						hotbarSelect = 4;
 						break;
 					case ALLEGRO_KEY_6:
 						block_selection=STONE_BLOCK;
+						hotbarSelect = 5;
 						break;
 					case ALLEGRO_KEY_7:
 						block_selection=OAK_LEAVES_BLOCK;
+						hotbarSelect = 6;
 						break;
 					case ALLEGRO_KEY_8:
 						block_selection=GLASS_BLOCK;
+						hotbarSelect = 7;
 						break;
 					case ALLEGRO_KEY_9:
 						block_selection=WATER_BLOCK;
+						hotbarSelect = 8;
 						break;
 					case ALLEGRO_KEY_K:
 						player.vert_speed=0;
@@ -316,19 +349,28 @@ int main(int argc, char **argv)
 		      		break;
 			case ALLEGRO_EVENT_MOUSE_BUTTON_DOWN:
 		      		Direction dir;
-				unsigned int block_index = ray_block_from_player(&dir,player,player.chunk_index);
+				unsigned int block_index = ray_block_from_player(&dir,player,
+						player.chunk_index);
 				if(block_index==UINT_MAX)break;
 				Pos block = INDEX_TO_POS(&world,block_index);
 				switch(event.mouse.button){
 					case 2:
 						if(dir==NoDirection)break;
-						int chunk_index = getChunk(&world,POS_TO_CHUNK_POS(adjacentPos(block,dir))/*(ADD_VEC(block, dirVectors[dir]))*/,block_index/MAX_CHUNK_BlOCKS);
+						int chunk_index = getChunk(&world,
+							POS_TO_CHUNK_POS(adjacentPos(block,dir)),
+							block_index/MAX_CHUNK_BlOCKS
+						);
 						ChunkPos p =worldl(&world)[chunk_index].pos;
-						block_index = POS_TO_INDEX((&world),adjacentPos(block,dir), block_index/MAX_CHUNK_BlOCKS);
-						setBlock(&world,block_index,chunk_index,block_selection);
+						block_index = POS_TO_INDEX((&world),
+							adjacentPos(block,dir), 
+							block_index/MAX_CHUNK_BlOCKS
+						);
+						setBlock(&world,block_index,chunk_index,
+								block_selection);
 						break;
 					case 1://break block
-						setBlock(&world,block_index,block_index/MAX_CHUNK_BlOCKS,AIR);
+						setBlock(&world,block_index,
+								block_index/MAX_CHUNK_BlOCKS,AIR);
 						break;
 				}
 				ChunkPos playerChunkPos = POS_TO_CHUNK_POS(player.pos);
@@ -336,20 +378,30 @@ int main(int argc, char **argv)
 				int i = (blockChunkPos.x-playerChunkPos.x+WORLD_CHUNKS)*
 					(2*WORLD_CHUNKS+1)+
 					(blockChunkPos.z-playerChunkPos.z+WORLD_CHUNKS);
-				list_free(worldMesh[i]);
-				worldMesh[i]=list_init(0);
-				createChunkMesh(&world,&(worldMesh[i]),&player,i);
+				int block_chunk = getChunk(&world,blockChunkPos,player.chunk_index);
+				
+				Chunk* chunk = &(worldl(&world)[block_chunk]);
+				List* mesh = &(worldl(&world)[block_chunk].mesh);
+
+				
+				list_free(chunk->mesh);
+				chunk->mesh=list_init(0);
+				createChunkMesh(&world,chunk,getChunk(&world,blockChunkPos,
+							player.chunk_index));
 				break;
 			case ALLEGRO_EVENT_TIMER:
 				redraw = true;
-		      		if(key[ALLEGRO_KEY_W])move(SPEED/FRAMERATE,&player,0,!flying);
+				float speed;
+				if(flying)speed = FLYING_SPEED;
+				else speed = WALKING_SPEED;
+		      		if(key[ALLEGRO_KEY_W])move(speed/FRAMERATE,&player,0,!flying);
 		  		else if(key[ALLEGRO_KEY_S])
-		  			move(SPEED/FRAMERATE,&player,ALLEGRO_PI,!flying);
+		  			move(speed/FRAMERATE,&player,ALLEGRO_PI,!flying);
 		  		else if(key[ALLEGRO_KEY_D]){
-		  			move(SPEED/FRAMERATE,&player,ALLEGRO_PI/2,!flying);
+		  			move(speed/FRAMERATE,&player,ALLEGRO_PI/2,!flying);
 				}
 		  		else if(key[ALLEGRO_KEY_A])
-		  			move(SPEED/FRAMERATE,&player,-ALLEGRO_PI/2,!flying);
+		  			move(speed/FRAMERATE,&player,-ALLEGRO_PI/2,!flying);
 		      		if(key[ALLEGRO_KEY_SPACE]&&flying){
 					player.pos.y+=20.0/FRAMERATE;
 		      		}
@@ -375,23 +427,36 @@ int main(int argc, char **argv)
 		}
 		int i = 0;
 		if (!background && redraw && al_is_event_queue_empty(queue)) {
-			set_perspective_transform(al_get_backbuffer(display),player);
-			
 			
 			al_set_target_backbuffer(display);
 			al_set_render_state(ALLEGRO_DEPTH_TEST, 1);
 			al_clear_to_color(al_map_rgb_f(0, 0, 0));
 			al_clear_depth_buffer(1000);
-			draw_world(worldMesh,&player);
+			
+			set_perspective_transform(al_get_backbuffer(display),player);
+			draw_world(&world,visibleChunks,&player);
 			
 			display_2d = al_create_sub_bitmap(al_get_backbuffer(display), 0, 0,
 				al_get_display_width(display), al_get_display_height(display));
 			al_set_target_bitmap(display_2d);
-			al_draw_rectangle(al_get_bitmap_width(display_2d)/2-10,
-			       	 al_get_bitmap_height(display_2d)/2-10,
-			       		 al_get_bitmap_width(display_2d)/2+10,
-			       	 al_get_bitmap_height(display_2d)/2+10, al_map_rgb_f(1,
-			       		 1, 1), 2);
+			
+			int width2d = al_get_bitmap_width(display_2d);
+			int height2d = al_get_bitmap_height(display_2d);
+
+			//draw hotbar
+			int hotbarHeight = width2d/2/9;
+			ALLEGRO_BITMAP* icon;
+			al_set_target_bitmap(display_2d);
+			
+			ALLEGRO_TRANSFORM I;
+			al_identity_transform(&I);
+			al_use_transform(&I);
+
+			al_draw_rectangle(width2d/2-10,height2d/2-10,
+			       		width2d/2+10, height2d/2+10, al_map_rgb_f(1, 1, 1), 2);
+			
+			drawHotbar(width2d/4,height2d-hotbarHeight,width2d/2,hotbarHeight,hotbarSelect,hotbar);
+			
 			char info_str[100];
 			const char* walking_or_flyingStr;
 			if(flying)walking_or_flyingStr=flyingStr;

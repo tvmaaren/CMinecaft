@@ -46,3 +46,4 @@ void list_concat(List *l,size_t s, void* p){
 	list_append(l,s);
 	memcpy(l->l+used_prev,p,s);
 }
+// vim: cc=100 

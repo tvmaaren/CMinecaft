@@ -2,10 +2,38 @@
 #include <stdio.h>
 #include <math.h>
 
+#define ICON_WIDTH_HEIGHT 100
+
 #include "list.h"
 #include "types.h"
 #include "block.h"
 #include "world.h"
+
+void set_other_transform(ALLEGRO_BITMAP* bmp)
+{
+	ALLEGRO_TRANSFORM p;
+	float aspect_ratio = (float)al_get_bitmap_height(bmp) / al_get_bitmap_width(bmp);
+	al_set_target_bitmap(bmp);
+	al_identity_transform(&p);
+	al_translate_transform_3d(&p,-4,-4,0);
+	al_rotate_transform_3d(&p,0,1,0,-ALLEGRO_PI/4);
+	al_translate_transform_3d(&p,0,-10,-20);
+	al_perspective_transform(&p, -0.25, 0.0*aspect_ratio, 1, 0.5, -0.85*aspect_ratio, 1000);
+	al_use_projection_transform(&p);
+}
+void createIcon(ALLEGRO_BITMAP** bmp, BlockTypeEnum type,int width,int height){
+	*bmp = al_create_bitmap(width,height);
+	al_set_target_bitmap(*bmp);
+	al_set_render_state(ALLEGRO_DEPTH_TEST, 1);
+	al_clear_to_color(al_map_rgba_f(0,0,0,0));
+	al_clear_depth_buffer(1000);
+	set_other_transform(*bmp);
+
+	draw_face((Side){type,(Pos){0,0,0},South},NULL);
+	draw_face((Side){type,(Pos){0,0,0},East},NULL);
+	draw_face((Side){type,(Pos){0,0,0},Top},NULL);
+	printf("End CreateIcon\n");
+}
 
 
 char* texturesStr[] = {"dirt.png", "grass_block_side.png",
@@ -113,7 +141,7 @@ const ALLEGRO_VERTEX block_faces[6][4]={{
 	   { SIZE_BLOCK, 0, 0, 16, 16,0},//5
 	}};
 void draw_face(Side face, Player *p){
-	if(lessThan(face.side, p->pos, face.pos))return;
+	if(p!=NULL && lessThan(face.side, p->pos, face.pos))return;
 	float x=face.pos.x*SIZE_BLOCK;
 	float y=face.pos.y*SIZE_BLOCK;
 	float z=-face.pos.z*SIZE_BLOCK-SIZE_BLOCK;
@@ -143,11 +171,14 @@ void createBlockMesh(List* world,List* chunkMesh,List* transparentBlocks, BlockT
 		//only draw the face if there is no face next to it
 		Pos adjacent_block_pos = ADD_VEC(pos,dirVectors[i]);
 		int chunk_adjacent = getChunk(world,POS_TO_CHUNK_POS(adjacent_block_pos),chunk_index);
-		if(chunk_adjacent==UINT_MAX)continue;
 		BlockTypeEnum type_adjacent;
-		int index = POS_TO_INDEX(world,adjacent_block_pos,chunk_index);
-		type_adjacent=WORLD_BLOCK_INDEX(world,index);
-		if(worldl(world)[chunk_adjacent].height<=adjacent_block_pos.y || adjacent_block_pos.y<0)type_adjacent =AIR;
+		if(chunk_adjacent==UINT_MAX){
+			type_adjacent=AIR;
+		}else{
+			int index = POS_TO_INDEX(world,adjacent_block_pos,chunk_index);
+			type_adjacent=WORLD_BLOCK_INDEX(world,index);
+			if(worldl(world)[chunk_adjacent].height<=adjacent_block_pos.y || adjacent_block_pos.y<0)type_adjacent =AIR;
+		}
 		if(	chunk_adjacent == UINT_MAX
 			||(!blockTypes[type].transparent && type_adjacent !=AIR && blockTypes[type_adjacent].transparent)
 				||is_block(world,adjacent_block_pos,chunk_index)==UINT_MAX){
@@ -159,31 +190,6 @@ void createBlockMesh(List* world,List* chunkMesh,List* transparentBlocks, BlockT
 				((Side*)chunkMesh->l)[chunkMesh->used/sizeof(Side)-1]=(Side){type,pos,i};
 			}
 		}
-   	}
-}
-void draw_block(List* world,List* transparentBlocks, BlockTypeEnum type,unsigned int chunk_index,Pos pos,Player* player)
-{
-	if(type==AIR)return;
-	
-	
-	for(int i=0;i<6;i++){
-		//If the side shouldn't be visible there is no point
-		//drawing it
-		if(lessThan(i,player->pos,pos))continue;
-
-		//only draw the face if there is no face next to it
-		Pos adjacent_block_pos = ADD_VEC(pos,dirVectors[i]);
-		int chunk_adjacent = getChunk(world,POS_TO_CHUNK_POS(adjacent_block_pos),chunk_index);
-		int index = POS_TO_INDEX(world,adjacent_block_pos,chunk_index);
-		BlockTypeEnum type_adjacent =WORLD_BLOCK_INDEX(world,index);
-		if(	chunk_adjacent |= UINT_MAX
-			||(blockTypes[type].transparent && type_adjacent !=AIR && blockTypes[type_adjacent].transparent)
-				||is_block(world,adjacent_block_pos,chunk_index)==UINT_MAX)
-			if(blockTypes[type].transparent){
-				list_append(transparentBlocks,sizeof(Side));
-				((Side*)transparentBlocks->l)[transparentBlocks->used/sizeof(Side)-1]=(Side){type,pos,i};
-			}else
-				draw_face((Side){type,pos,i},player);
    	}
 }
 
@@ -210,8 +216,10 @@ void loadBlocks(){
 			blockTypes[i].sides[j].texture = texturesBMP[t];
 			blockTypes[i].sides[j].color = al_map_rgb(c.r,c.g,c.b);
 		}
+		createIcon(&(blockTypes[i].bmp), i,ICON_WIDTH_HEIGHT,ICON_WIDTH_HEIGHT);
 	}
 }
+
 Direction hitDirectionBlock(Pos prev_pos, Pos block_pos){
 	if(prev_pos.y>block_pos.y+1)return Top;
 	else if(prev_pos.y<block_pos.y)return Bottem;
@@ -221,3 +229,27 @@ Direction hitDirectionBlock(Pos prev_pos, Pos block_pos){
 	else if(prev_pos.z>block_pos.z+1)return North;
 	else return NoDirection;
 }
+
+
+void drawHotbar(float x,float y,float width,float height,int select,BlockTypeEnum* hotbar){
+	float selectX1 = x+height*select;
+	float selectX2 = selectX1+height;
+	al_draw_rectangle(selectX1,y,selectX2,y+height,
+			al_map_rgb_f(1,0,0),2);
+	float x1;
+	float x2=x;
+	for(int j=0;j<9;j++){
+		x1 = x2;
+		x2=x1+height;
+		if(select!=j)
+		al_draw_rectangle(x1,y,x2,y+height,
+				al_map_rgb_f(1,1,1),2);
+		//al_draw_bitmap(blockTypes[hotbar[j]].bmp,x1,0,0);
+		al_draw_scaled_bitmap(blockTypes[hotbar[j]].bmp,
+				0,0,ICON_WIDTH_HEIGHT,ICON_WIDTH_HEIGHT,
+				x1,y,height,height,0);
+		//al_draw_line(x,height2d-hotbarHeight,x,height2d,
+		//		al_map_rgb_f(1, 1, 1),2);
+	}
+}
+// vim: cc=100 

@@ -26,6 +26,7 @@ typedef struct{
 typedef struct{
 	BlockSide sides[6];
 	bool transparent;
+	ALLEGRO_BITMAP* bmp;
 }BlockType;
 
 typedef enum{AIR=UINT_MAX, GRASS_BLOCK=0, DIRT_BLOCK=1, COBBLESTONE_BLOCK=2,
@@ -40,6 +41,9 @@ typedef struct{
 	Direction side;
 }Side;
 
+void createIcon(ALLEGRO_BITMAP** bmp, BlockTypeEnum type,int width,int height);
+void drawHotbar(float x,float y,float width,float height,int select,
+		BlockTypeEnum* hotbar);
 void draw_face(Side face, Player *p);
 void draw_block(List* world,List* transparentBlocks, BlockTypeEnum type,unsigned int chunk_index,Pos pos,Player* player);
 Pos adjacentPos(Pos p,  Direction d);

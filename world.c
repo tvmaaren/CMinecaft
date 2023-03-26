@@ -19,6 +19,8 @@ void saveWorld(FILE* restrict stream, List* world){
 	for(int i = 0; i<AM_CHUNKS;i++){
 		List* pBlocks = &worldl(world)[i].blocks;
 		fwrite(pBlocks->l,pBlocks->used,1,stream);
+		List* mesh = &worldl(world)[i].mesh;
+		fwrite(mesh->l,mesh->used,1,stream);
 	}
 }
 
@@ -30,6 +32,10 @@ void loadWorld(FILE* restrict stream, List* world){
 		List* pBlocks = &worldl(world)[i].blocks;
 		pBlocks->l = malloc(pBlocks->available);
 		fread(pBlocks->l,pBlocks->used,1,stream);
+		List* mesh = &worldl(world)[i].mesh;
+		mesh->l = malloc(mesh->available);
+		fread(mesh->l,mesh->used,1,stream);
+
 	}
 }
 
@@ -58,47 +64,51 @@ unsigned int is_block(List* world, Pos pos, unsigned int chunk_index){
 	return(chunk_index * MAX_CHUNK_BlOCKS + block_index);
 }
 
-void reCreateWorldMesh(List* world, List* worldMesh,Player* p){
-	for(int i=0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++){
-		list_free(worldMesh[i]);
-		worldMesh[i]=list_init(0);
-	}
-	createWorldMesh(world, worldMesh, p);
-}
+//void reCreateWorldMesh(List* world, List* worldMesh,Player* p){
+//	for(int i=0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++){
+//		list_free(worldMesh[i]);
+//		worldMesh[i]=list_init(0);
+//	}
+//	createWorldMesh(world, worldMesh, p);
+//}
 
-void createChunkMesh(List* world,List* chunkMesh,Player* p,int i){
-	ChunkPos playerChunkPos = POS_TO_CHUNK_POS(p->pos);
+void createChunkMesh(List* world,Chunk* chunk,int chunkIndex){
+	//ChunkPos playerChunkPos = POS_TO_CHUNK_POS(p->pos);
+	chunk->mesh = list_init(0);
 	List transparentFaces = list_init(0);
 
-	ChunkPos chunkPos = {	playerChunkPos.x+(-WORLD_CHUNKS+i/(2*WORLD_CHUNKS+1)),
-				playerChunkPos.z+(-WORLD_CHUNKS+i%(2*WORLD_CHUNKS+1))};
-	int chunkIndex = getChunk(world,chunkPos, p->chunk_index);
-	Chunk chunk = worldl(world)[chunkIndex];
-	BlockTypeEnum* blocks = (BlockTypeEnum*)chunk.blocks.l;
-	for(unsigned int h=0;h<chunk.height;h++){
+	//ChunkPos chunkPos = {	playerChunkPos.x+(-WORLD_CHUNKS+i/(2*WORLD_CHUNKS+1)),
+	//			playerChunkPos.z+(-WORLD_CHUNKS+i%(2*WORLD_CHUNKS+1))};
+	//int chunkIndex = getChunk(world,chunkPos, p->chunk_index);
+	//Chunk chunk = worldl(world)[chunkIndex];
+	BlockTypeEnum* blocks = (BlockTypeEnum*)chunk->blocks.l;
+	for(unsigned int h=0;h<chunk->height;h++){
 		for(unsigned int w=0;w<CHUNK_WIDTH*CHUNK_WIDTH;w++){
-			Pos pos = ADD_VEC(CHUNK_POS_TO_BLOCK(chunkPos),
+			Pos pos = ADD_VEC(CHUNK_POS_TO_BLOCK(chunk->pos),
 					((Vec){w/CHUNK_WIDTH,h,w%CHUNK_WIDTH}));
-			createBlockMesh(world,chunkMesh,&transparentFaces,
+			createBlockMesh(world,&(chunk->mesh),&transparentFaces,
 					blocks[h*CHUNK_WIDTH*CHUNK_WIDTH+w],chunkIndex,pos);
 		}
 	}
-	list_concat(chunkMesh,transparentFaces.used,transparentFaces.l);
+	list_concat(&(chunk->mesh),transparentFaces.used,transparentFaces.l);
 	list_free(transparentFaces);
 }
-void createWorldMesh(List* world,List* worldMesh,Player* p){
-	for(int i=0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++){
-		createChunkMesh(world,&(worldMesh[i]),p,i);
-	}
-}
+//void createWorldMesh(List* world,List* worldMesh,Player* p){
+//	for(int i=0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++){
+//		createChunkMesh(world,&(worldMesh[i]),p,i);
+//	}
+//}
 
 void drawChunk(List* chunkMesh, Player*p){
 	for(int j=0;j<(chunkMesh->used)/sizeof(Side);j++){
 		draw_face(((Side*)chunkMesh->l)[j],p);
+		//draw_face(((Side*)chunkMesh->l)[j],NULL);
 	}
 }
 
-void draw_world(List* worldMesh,Player *p){
+void draw_world(List* world,int* chunks_indices,Player *p){
+
+	#define DRAW(i) drawChunk(&(worldl(world)[chunks_indices[i]].mesh),p)
 	//first draw the outer chunks
 	for(int i=WORLD_CHUNKS;i>0;i--){
 		int NW = (2*WORLD_CHUNKS+1)*(WORLD_CHUNKS-i)+WORLD_CHUNKS-i;
@@ -106,31 +116,44 @@ void draw_world(List* worldMesh,Player *p){
 		int SW = NW+2*i*(2*WORLD_CHUNKS+1);
 		int SE = SW+2*i;
 
-		drawChunk(&(worldMesh[NW]),p);
-		drawChunk(&(worldMesh[NE]),p);
-		drawChunk(&(worldMesh[SW]),p);
-		drawChunk(&(worldMesh[SE]),p);
+		DRAW(NW); DRAW(NE); DRAW(SW); DRAW(SE);
+		//drawChunk(&(worldMesh[NW]),p);
+		//drawChunk(&(worldMesh[NE]),p);
+		//drawChunk(&(worldMesh[SW]),p);
+		//drawChunk(&(worldMesh[SE]),p);
 
 		for(int k=1;k<i;k++){
-			drawChunk(&(worldMesh[NW+k]),p);
-			drawChunk(&(worldMesh[NW+(2*WORLD_CHUNKS+1)*k]),p);
+			DRAW(NW+k);
+			DRAW(NW+(2*WORLD_CHUNKS+1)*k);
 
-			drawChunk(&(worldMesh[NE-k]),p);
-			drawChunk(&(worldMesh[NE+(2*WORLD_CHUNKS+1)*k]),p);
+			DRAW(NE-k);
+			DRAW(NE+(2*WORLD_CHUNKS+1)*k);
 
-			drawChunk(&(worldMesh[SW+k]),p);
-			drawChunk(&(worldMesh[SW-(2*WORLD_CHUNKS+1)*k]),p);
+			DRAW(SW+k);
+			DRAW(SW-(2*WORLD_CHUNKS+1)*k);
 
-			drawChunk(&(worldMesh[SE-k]),p);
-			drawChunk(&(worldMesh[SE-(2*WORLD_CHUNKS+1)*k]),p);
+			DRAW(SE-k);
+			DRAW(SE-(2*WORLD_CHUNKS+1)*k);
+			
+			//drawChunk(&(worldMesh[NW+k]),p);
+			//drawChunk(&(worldMesh[NW+(2*WORLD_CHUNKS+1)*k]),p);
+
+			//drawChunk(&(worldMesh[NE-k]),p);
+			//drawChunk(&(worldMesh[NE+(2*WORLD_CHUNKS+1)*k]),p);
+
+			//drawChunk(&(worldMesh[SW+k]),p);
+			//drawChunk(&(worldMesh[SW-(2*WORLD_CHUNKS+1)*k]),p);
+
+			//drawChunk(&(worldMesh[SE-k]),p);
+			//drawChunk(&(worldMesh[SE-(2*WORLD_CHUNKS+1)*k]),p);
 		}
-		drawChunk(&(worldMesh[NW+i]),p);
-		drawChunk(&(worldMesh[NE+i*(2*WORLD_CHUNKS+1)]),p);
-		drawChunk(&(worldMesh[SW-i*(2*WORLD_CHUNKS+1)]),p);
-		drawChunk(&(worldMesh[SE-i]),p);
+		DRAW(NW+i);
+		DRAW(NE+i*(2*WORLD_CHUNKS+1));
+		DRAW(SW-i*(2*WORLD_CHUNKS+1));
+		DRAW(SE-i);
 	}
 	//Draw the chunk where the player is located
-	drawChunk(&(worldMesh[WORLD_CHUNKS*(2*WORLD_CHUNKS+1)+WORLD_CHUNKS]),p);
+	DRAW(WORLD_CHUNKS*(2*WORLD_CHUNKS+1)+WORLD_CHUNKS);
 }
 
 
@@ -188,7 +211,8 @@ Chunk renderChunk(ChunkPos pos){
 }
 
 
-void loadChunks(List* world,Player p){
+void loadChunks(List* world,int* visibleChunks,Player p){
+	int prevAmChunks = AM_CHUNKS;
 	ChunkPos playerChunkPos = POS_TO_CHUNK_POS(p.pos);
 	for(int i=0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++){
 		ChunkPos chunkPos = {	playerChunkPos.x+(-WORLD_CHUNKS+i/(2*WORLD_CHUNKS+1)),
@@ -198,5 +222,10 @@ void loadChunks(List* world,Player p){
 			list_append(world,sizeof(Chunk));
 			worldl(world)[AM_CHUNKS-1]=renderChunk(chunkPos);
 		}
+		chunkIndex = getChunk(world,chunkPos, p.chunk_index);
+		visibleChunks[i]=chunkIndex;
+	}
+	for(int j=prevAmChunks; j<AM_CHUNKS;j++){
+		createChunkMesh(world, &(worldl(world)[j]), j);
 	}
 }
