@@ -32,7 +32,6 @@ void createIcon(ALLEGRO_BITMAP** bmp, BlockTypeEnum type,int width,int height){
 	draw_face((Side){type,(Pos){0,0,0},South},NULL);
 	draw_face((Side){type,(Pos){0,0,0},East},NULL);
 	draw_face((Side){type,(Pos){0,0,0},Top},NULL);
-	printf("End CreateIcon\n");
 }
 
 
@@ -244,12 +243,9 @@ void drawHotbar(float x,float y,float width,float height,int select,BlockTypeEnu
 		if(select!=j)
 		al_draw_rectangle(x1,y,x2,y+height,
 				al_map_rgb_f(1,1,1),2);
-		//al_draw_bitmap(blockTypes[hotbar[j]].bmp,x1,0,0);
 		al_draw_scaled_bitmap(blockTypes[hotbar[j]].bmp,
 				0,0,ICON_WIDTH_HEIGHT,ICON_WIDTH_HEIGHT,
 				x1,y,height,height,0);
-		//al_draw_line(x,height2d-hotbarHeight,x,height2d,
-		//		al_map_rgb_f(1, 1, 1),2);
 	}
 }
 // vim: cc=100 

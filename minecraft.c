@@ -363,8 +363,18 @@ int main(int argc, char **argv)
 						ChunkPos p =worldl(&world)[chunk_index].pos;
 						block_index = POS_TO_INDEX((&world),
 							adjacentPos(block,dir), 
-							block_index/MAX_CHUNK_BlOCKS
+							chunk_index
 						);
+						int player_block_index = POS_TO_INDEX(
+							(&world),player.pos,chunk_index);
+						
+						Pos feet_pos = adjacentPos(player.pos,Bottem);
+
+						int feet_block_index = POS_TO_INDEX(
+							(&world),feet_pos,chunk_index);
+						if(player_block_index==block_index
+							||feet_block_index==block_index)break;
+
 						setBlock(&world,block_index,chunk_index,
 								block_selection);
 						break;
