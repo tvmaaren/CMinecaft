@@ -30,6 +30,7 @@ void list_append(List *l,size_t s){
 	while(l->used>l->available){
 		resize=true;
 		l->available*=2;
+		if(l->available==0)l->available+=2;
 	}
 	if(resize)l->l = realloc(l->l,l->available);
 }

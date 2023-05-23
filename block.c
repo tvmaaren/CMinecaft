@@ -163,16 +163,22 @@ void draw_face(Side face, Player *p){
 			indices,6, ALLEGRO_PRIM_TRIANGLE_LIST);
 }
 
+int modulo(int a,int b){
+	int r = a%b;
+	if(r<0)return(r+b);
+	return r;
+}
+
 Direction isOnChunkEdge(IPos pos, Direction dir){
 	switch(dir){
 		case(West):
-			return pos.x%CHUNK_WIDTH==0;
+			return modulo(pos.x,CHUNK_WIDTH)==0;
 		case(East):	
-			return pos.x%CHUNK_WIDTH==CHUNK_WIDTH-1;
+			return modulo(pos.x,CHUNK_WIDTH)==CHUNK_WIDTH-1;
 		case(South):
-			return pos.z%CHUNK_WIDTH==0;
+			return modulo(pos.z,CHUNK_WIDTH)==0;
 		case(North):
-			return pos.z%CHUNK_WIDTH==CHUNK_WIDTH-1;
+			return modulo(pos.z,CHUNK_WIDTH)==CHUNK_WIDTH-1;
 		default: 
 			return false;
 	}
