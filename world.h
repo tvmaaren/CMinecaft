@@ -1,5 +1,6 @@
 //Amount of Chunks that should be loaded in every
 //direction
+
 #define WORLD_CHUNKS 4
 
 #define CHUNK_WIDTH 		16 //Depth and width of a chunk
@@ -15,16 +16,6 @@
 #define INDEX_TO_POS(w,i)  ((Pos)ADD_VEC((CHUNK_POS_TO_BLOCK(worldl(w)[i/MAX_CHUNK_BlOCKS].pos)),((Vec){i%(CHUNK_WIDTH*CHUNK_WIDTH)/CHUNK_WIDTH,i%MAX_CHUNK_BlOCKS/(CHUNK_WIDTH*CHUNK_WIDTH),i%CHUNK_WIDTH})))
 #define POS_TO_INDEX(world,pos,chunk) (getChunk(world,(POS_TO_CHUNK_POS(pos)),chunk)*MAX_CHUNK_BlOCKS+POS_TO_BLOCK_INDEX(pos))
 
-typedef struct{
-	int x,z;
-}ChunkPos;	
-
-typedef struct{
-	unsigned int height;
-	ChunkPos pos;
-	List blocks;
-	List mesh;
-}Chunk;
 
 void saveWorld(FILE* restrict stream, List* world);
 void loadWorld(FILE* restrict stream, List* world);
@@ -38,3 +29,4 @@ void loadChunks(List* world,int* visibleChunks,Player p);
 void createWorldMesh(List* world,List* worldMesh,Player* p);
 void reCreateWorldMesh(List* world,List* worldMesh,Player* p);
 void createChunkMesh(List* world,Chunk* chunk,int chunkIndex);
+void freeChunkMesh(Chunk* chunk);

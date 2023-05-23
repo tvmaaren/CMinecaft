@@ -6,9 +6,11 @@
 
 #include "list.h"
 #include "types.h"
+#include "chunk.h"
 #include "block.h"
 #include "world.h"
 
+Vec dirVectors[6]={{0,1,0},{0,-1,0},{-1,0,0},{1,0,0},{0,0,-1},{0,0,1}};
 void set_other_transform(ALLEGRO_BITMAP* bmp)
 {
 	ALLEGRO_TRANSFORM p;
@@ -29,9 +31,9 @@ void createIcon(ALLEGRO_BITMAP** bmp, BlockTypeEnum type,int width,int height){
 	al_clear_depth_buffer(1000);
 	set_other_transform(*bmp);
 
-	draw_face((Side){type,(Pos){0,0,0},South},NULL);
-	draw_face((Side){type,(Pos){0,0,0},East},NULL);
-	draw_face((Side){type,(Pos){0,0,0},Top},NULL);
+	draw_face((Side){type,(IPos){0,0,0},South},NULL);
+	draw_face((Side){type,(IPos){0,0,0},East},NULL);
+	draw_face((Side){type,(IPos){0,0,0},Top},NULL);
 }
 
 
@@ -88,7 +90,6 @@ bool lessThan(Direction dir, Pos p1, Pos p2){
 		case North: return(p1.z<p2.z);
 	}
 }
-Vec dirVectors[6]={{0,1,0},{0,-1,0},{-1,0,0},{1,0,0},{0,0,-1},{0,0,1}};
 
 Pos adjacentPos(Pos p,  Direction d){
 	return(ADD_VEC(p,dirVectors[d]));
@@ -140,7 +141,7 @@ const ALLEGRO_VERTEX block_faces[6][4]={{
 	   { SIZE_BLOCK, 0, 0, 16, 16,0},//5
 	}};
 void draw_face(Side face, Player *p){
-	if(p!=NULL && lessThan(face.side, p->pos, face.pos))return;
+	if(p!=NULL && lessThan(face.side, p->pos, CAST_TO_POS(face.pos)))return;
 	float x=face.pos.x*SIZE_BLOCK;
 	float y=face.pos.y*SIZE_BLOCK;
 	float z=-face.pos.z*SIZE_BLOCK-SIZE_BLOCK;
@@ -162,34 +163,76 @@ void draw_face(Side face, Player *p){
 			indices,6, ALLEGRO_PRIM_TRIANGLE_LIST);
 }
 
-void createBlockMesh(List* world,List* chunkMesh,List* transparentBlocks, BlockTypeEnum type,unsigned int chunk_index,Pos pos)
-{
+Direction isOnChunkEdge(IPos pos, Direction dir){
+	switch(dir){
+		case(West):
+			return pos.x%CHUNK_WIDTH==0;
+		case(East):	
+			return pos.x%CHUNK_WIDTH==CHUNK_WIDTH-1;
+		case(South):
+			return pos.z%CHUNK_WIDTH==0;
+		case(North):
+			return pos.z%CHUNK_WIDTH==CHUNK_WIDTH-1;
+		default: 
+			return false;
+	}
+}
+
+void createBlockSideMesh(List* world,Chunk* chunk,List* transparentBlocks,
+		BlockTypeEnum type,unsigned int chunk_index,IPos pos, Direction i){
 	if(type==AIR)return;
-	
-	for(int i=0;i<6;i++){
-		//only draw the face if there is no face next to it
-		Pos adjacent_block_pos = ADD_VEC(pos,dirVectors[i]);
-		int chunk_adjacent = getChunk(world,POS_TO_CHUNK_POS(adjacent_block_pos),chunk_index);
-		BlockTypeEnum type_adjacent;
-		if(chunk_adjacent==UINT_MAX){
-			type_adjacent=AIR;
+	//only draw the face if there is no face next to it
+	List* chunkMesh= &(chunk->mesh);
+	Pos adjacent_block_pos = ADD_VEC(pos,dirVectors[i]);
+
+	//The player should never come at the bottom of the world
+	//so there is no point drawing the face
+	if(adjacent_block_pos.y<0)return;
+
+	int chunk_adjacent = getChunk(world,POS_TO_CHUNK_POS(adjacent_block_pos),chunk_index);
+	BlockTypeEnum type_adjacent;
+	if(chunk_adjacent==UINT_MAX){
+		type_adjacent=AIR;
+	}else{
+		unsigned int chunk = getChunk(world,(POS_TO_CHUNK_POS(adjacent_block_pos)),chunk_index);
+		unsigned int block_index = POS_TO_BLOCK_INDEX(adjacent_block_pos);
+		unsigned int index = chunk*MAX_CHUNK_BlOCKS+block_index;
+		//int index = POS_TO_INDEX(world,adjacent_block_pos,chunk_index);
+//#define POS_TO_INDEX(world,pos,chunk) (getChunk(world,(POS_TO_CHUNK_POS(pos)),chunk)*MAX_CHUNK_BlOCKS+POS_TO_BLOCK_INDEX(pos))
+		type_adjacent=WORLD_BLOCK_INDEX(world,index);
+		if(worldl(world)[chunk_adjacent].height<=adjacent_block_pos.y || adjacent_block_pos.y<0)type_adjacent =AIR;
+	}
+	if(	chunk_adjacent == UINT_MAX
+		||(type_adjacent !=AIR &&!blockTypes[type].transparent &&  blockTypes[type_adjacent].transparent)
+			||is_block(world,adjacent_block_pos,chunk_index)==UINT_MAX){
+		bool test = blockTypes[type].transparent;
+		if(blockTypes[type].transparent){
+			list_append(transparentBlocks,sizeof(Side));
+			((Side*)transparentBlocks->l)[transparentBlocks->used/sizeof(Side)-1]=(Side){type,pos,i};
 		}else{
-			int index = POS_TO_INDEX(world,adjacent_block_pos,chunk_index);
-			type_adjacent=WORLD_BLOCK_INDEX(world,index);
-			if(worldl(world)[chunk_adjacent].height<=adjacent_block_pos.y || adjacent_block_pos.y<0)type_adjacent =AIR;
-		}
-		if(	chunk_adjacent == UINT_MAX
-			||(!blockTypes[type].transparent && type_adjacent !=AIR && blockTypes[type_adjacent].transparent)
-				||is_block(world,adjacent_block_pos,chunk_index)==UINT_MAX){
-			if(blockTypes[type].transparent){
-				list_append(transparentBlocks,sizeof(Side));
-				((Side*)transparentBlocks->l)[transparentBlocks->used/sizeof(Side)-1]=(Side){type,pos,i};
+			bool a = isOnChunkEdge(pos, i);
+			bool b = i>=2&&a;
+			if(b){
+				List* sideMesh = &(chunk->sideMeshes[i-2]);
+				list_append(sideMesh,sizeof(Side));
+				((Side*)sideMesh->l)[sideMesh->used/sizeof(Side)-1]=(Side){type,pos,i};
 			}else{
 				list_append(chunkMesh,sizeof(Side));
 				((Side*)chunkMesh->l)[chunkMesh->used/sizeof(Side)-1]=(Side){type,pos,i};
 			}
 		}
-   	}
+	}
+}
+
+void createBlockMesh(List* world,Chunk* chunk,List* transparentBlocks, BlockTypeEnum type,unsigned int chunk_index,IPos pos)
+{
+	if(type==AIR)return;
+	
+	for(int i=0;i<6;i++){
+		if(type==1028098){
+		}
+		createBlockSideMesh(world,chunk,transparentBlocks,type, chunk_index, pos ,i);
+	}
 }
 
 void loadBlocks(){

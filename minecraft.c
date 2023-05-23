@@ -10,6 +10,7 @@
 
 #include "types.h"
 #include "list.h"
+#include "chunk.h"
 #include "block.h"
 #include "world.h"
 
@@ -383,21 +384,16 @@ int main(int argc, char **argv)
 								block_index/MAX_CHUNK_BlOCKS,AIR);
 						break;
 				}
-				ChunkPos playerChunkPos = POS_TO_CHUNK_POS(player.pos);
-				ChunkPos blockChunkPos =POS_TO_CHUNK_POS(block);
-				int i = (blockChunkPos.x-playerChunkPos.x+WORLD_CHUNKS)*
-					(2*WORLD_CHUNKS+1)+
-					(blockChunkPos.z-playerChunkPos.z+WORLD_CHUNKS);
-				int block_chunk = getChunk(&world,blockChunkPos,player.chunk_index);
-				
-				Chunk* chunk = &(worldl(&world)[block_chunk]);
-				List* mesh = &(worldl(&world)[block_chunk].mesh);
+				////ChunkPos playerChunkPos = POS_TO_CHUNK_POS(player.pos);
+				//ChunkPos blockChunkPos =POS_TO_CHUNK_POS(block);
+				////int i = (blockChunkPos.x-playerChunkPos.x+WORLD_CHUNKS)*
+				////	(2*WORLD_CHUNKS+1)+
+				////	(blockChunkPos.z-playerChunkPos.z+WORLD_CHUNKS);
+				//int block_chunk = getChunk(&world,blockChunkPos,player.chunk_index);
+				//
+				//Chunk* chunk = &(worldl(&world)[block_chunk]);
+				////List* mesh = &(worldl(&world)[block_chunk].mesh);
 
-				
-				list_free(chunk->mesh);
-				chunk->mesh=list_init(0);
-				createChunkMesh(&world,chunk,getChunk(&world,blockChunkPos,
-							player.chunk_index));
 				break;
 			case ALLEGRO_EVENT_TIMER:
 				redraw = true;
@@ -418,7 +414,7 @@ int main(int argc, char **argv)
 		      		if(key[ALLEGRO_KEY_LSHIFT]||key[ALLEGRO_KEY_LSHIFT]){
 					if(flying)player.pos.y-=20.0/FRAMERATE;
 		      		}
-		      		i=0;
+		      		int i=0;
 		      		while(i < ALLEGRO_KEY_MAX){
 		      			key[i] &= KEY_SEEN;
 		      			i++;
