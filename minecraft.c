@@ -119,12 +119,11 @@ float distanceInterval(float x,float a,float b){
 	else if(b<=x)return(x-b);
 	else return(0);
 }
+extern ALLEGRO_DISPLAY* display;
 
-
-int main(int argc, char **argv)
+void minecraft()
 {
 
-	ALLEGRO_DISPLAY *display;
 	ALLEGRO_TIMER *timer;
 	ALLEGRO_EVENT_QUEUE *queue;
 	ALLEGRO_BITMAP *display_2d;
@@ -159,9 +158,6 @@ int main(int argc, char **argv)
 	al_install_keyboard();
 	al_install_mouse();
 	
-	al_set_new_display_flags(display_flags);
-	al_set_new_display_option(ALLEGRO_DEPTH_SIZE, 16, ALLEGRO_SUGGEST);
-	display = al_create_display(SCREEN_WIDTH, SCREEN_HEIGHT);
 	al_hide_mouse_cursor(display);
 	al_grab_mouse(display);
 	al_set_mouse_xy(display,SCREEN_WIDTH/2,SCREEN_HEIGHT/2);
@@ -248,8 +244,7 @@ int main(int argc, char **argv)
 		al_wait_for_event(queue, &event);
 		switch (event.type) {
 			case ALLEGRO_EVENT_DISPLAY_CLOSE:
-				quit = true;
-				break;
+				exit(0);
 			case ALLEGRO_EVENT_DISPLAY_RESIZE:
 				al_acknowledge_resize(display);
 				break;
@@ -286,8 +281,7 @@ int main(int argc, char **argv)
 				key[event.keyboard.keycode] = KEY_SEEN | KEY_RELEASED;
 		      		switch (event.keyboard.keycode) {
 		  	    		case ALLEGRO_KEY_ESCAPE:
-		  	       			quit = true;
-		  	       			break;
+						exit(0);
 		  	    		case ALLEGRO_KEY_F11:
 		  	       			fullscreen = !fullscreen;
 						al_set_display_flag(display,
@@ -478,6 +472,6 @@ int main(int argc, char **argv)
 			redraw = false;
 		}
 	}
-   	return 0;
+   	return;
 }
 // vim: cc=100 
