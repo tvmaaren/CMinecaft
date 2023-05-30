@@ -1,7 +1,7 @@
 //Amount of Chunks that should be loaded in every
 //direction
 
-#define WORLD_CHUNKS 4
+#define WORLD_CHUNKS 1
 
 #define CHUNK_WIDTH 		16 //Depth and width of a chunk
 #define MAX_CHUNK_HEIGHT 	256

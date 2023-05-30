@@ -3,7 +3,14 @@
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_ttf.h>
+#include <allegro5/allegro_image.h>
 
+//TODO: Includes
+#include "list.h"
+#include "types.h"
+#include "chunk.h"
+#include "block.h"
+#include "world.h"
 #include "minecraft.h"
 #include "gui.h"
 
@@ -17,6 +24,15 @@ int screen_height = 480;
 const char fontPath[] = "DejaVuSans.ttf";
 
 
+typedef enum{MENU,MINECRAFT}Mode;
+Mode mode = MENU;
+
+Minecraft minecraft;
+void switchToMinecraft(){
+	initMinecraft(&minecraft);
+	mode = MINECRAFT;
+}
+
 int main()
 {
 	if(!al_init())
@@ -24,8 +40,16 @@ int main()
 		printf("couldn't initialize allegro\n");
 		return 1;
 	}
+	if(!al_init_image_addon()){
+		printf("couldn't initialize image addon\n");
+		return 1;
+	}
 	if(!al_init_primitives_addon()){
 		printf("couldn't initialize primitives addon\n");
+		return 1;
+	}
+	if(!al_init_font_addon()){//TODO: Check if this is necessary
+		printf("couldn't initialize font addon\n");
 		return 1;
 	}
 	if(!al_init_ttf_addon()){
@@ -61,6 +85,7 @@ int main()
 	al_set_new_display_flags(ALLEGRO_RESIZABLE);
 	al_set_new_display_option(ALLEGRO_DEPTH_SIZE, 16, ALLEGRO_SUGGEST);
 	display = al_create_display(screen_width, screen_height);
+	loadBlocks();
 	if(!display)
 	{
 		printf("couldn't initialize display\n");
@@ -84,7 +109,7 @@ int main()
 	ALLEGRO_EVENT event;
 
 	Button startButton;
-	initButton(&startButton,"Singleplayer", 0.2,0.4,0.8,0.6,minecraft);
+	initButton(&startButton,"Singleplayer", 0.2,0.4,0.8,0.6,switchToMinecraft);
 	Gui gui;
 	Button* widgets[] = {&startButton};
 	WidgetType types[] = {BUTTON};
@@ -92,11 +117,19 @@ int main()
 
 	al_start_timer(timer);
 	int i=0;
+	
 	while(true)
 	{
 		al_wait_for_event(queue, &event);
-		handleGui(&gui,&event);
 		al_acknowledge_resize(display);
+		switch(mode){
+			case MENU:
+				handleGui(&gui,&event);
+				break;
+			case MINECRAFT:
+				handleMinecraft(&minecraft, &event);
+				break;
+		}
 
 		switch(event.type)
 		{
@@ -113,16 +146,21 @@ int main()
 				exit(0);
 		}
 
-		if(done)
-			minecraft();
 
 		if(redraw && al_is_event_queue_empty(queue))
 		{
-			//printf("%d,%d\n",i,screen_height);
 			i++;
+			al_set_target_backbuffer(display);
 			al_clear_to_color(al_map_rgb(0, 0, 0));
 			al_draw_text(font, al_map_rgb(255, 255, 255), 0, 0, 0, "Hello world!");
-			drawGui(&gui);
+			switch(mode){
+				case MENU:
+					drawGui(&gui);
+					break;
+				case MINECRAFT:
+					drawMinecraft(&minecraft);
+					break;
+			}
 			al_flip_display();
 
 			redraw = false;

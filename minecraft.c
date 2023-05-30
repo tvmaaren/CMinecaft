@@ -13,8 +13,9 @@
 #include "chunk.h"
 #include "block.h"
 #include "world.h"
+#include "minecraft.h"
 
-#define FRAMERATE 60.0
+#define FRAMERATE 30.0
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
 
@@ -23,8 +24,6 @@
 #define GRAVITY -0.5
 
 
-List world;
-int visibleChunks[(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1)];
 
 
 
@@ -44,28 +43,28 @@ void set_perspective_transform(ALLEGRO_BITMAP* bmp,Player player)
 
 
 
-bool isValidPlayerPos(Pos pos, unsigned int chunk_index){
+bool isValidPlayerPos(List* world, Pos pos, unsigned int chunk_index){
 	Pos pos_low=pos;
 	pos_low.y--;
-	return(is_block(&world,pos_low,chunk_index)==UINT_MAX
+	return(is_block(world,pos_low,chunk_index)==UINT_MAX
 					//Checks if the lower part of the player's body is
 					//in a valid position
-			&& is_block(&world,pos,chunk_index)==UINT_MAX);
+			&& is_block(world,pos,chunk_index)==UINT_MAX);
 }
 
 
-
-void getVisibleChunks(int* visibleChunks,Player* p){
+//TODO: Check if it is necessary
+void getVisibleChunks(List* world, int* visibleChunks,Player* p){
 	ChunkPos playerChunkPos = POS_TO_CHUNK_POS(p->pos);
 	for(int i=0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++){
 		ChunkPos chunkPos = {	playerChunkPos.x+(-WORLD_CHUNKS+i/(2*WORLD_CHUNKS+1)),
 					playerChunkPos.z+(-WORLD_CHUNKS+i%(2*WORLD_CHUNKS+1))};
-		visibleChunks[i]=getChunk(&world,chunkPos,p->chunk_index);
+		visibleChunks[i]=getChunk(world,chunkPos,p->chunk_index);
 	}
 }
 
 
-void move(float step, Player* p,float angle,bool checkValid){
+void move(Minecraft* minecraft, float step, Player* p,float angle,bool checkValid){
 	int prevChunkIndex = p->chunk_index;
 
 	float x = cos(p->hor_angle+angle);
@@ -79,38 +78,38 @@ void move(float step, Player* p,float angle,bool checkValid){
 	new_pos_extra.x+=(step+0.1)*y;
 
 	//check if the chunk index is still correct
-	unsigned int new_chunk_index = getChunk(&world,POS_TO_CHUNK_POS(new_pos), p->chunk_index);
+	unsigned int new_chunk_index = getChunk(&(minecraft->world),POS_TO_CHUNK_POS(new_pos), p->chunk_index);
 
-	if(!checkValid ||  isValidPlayerPos(new_pos_extra,new_chunk_index)){
+	if(!checkValid ||  isValidPlayerPos(&(minecraft->world),new_pos_extra,new_chunk_index)){
 		p->pos=new_pos;
 		p->chunk_index=new_chunk_index;
 	}
 	if(prevChunkIndex!=p->chunk_index){
-		loadChunks(&world,visibleChunks,*p);
+		loadChunks(&(minecraft->world),minecraft->visibleChunks,*p);
 		//getVisibleChunks(visibleChunks,p);
 
 		//reCreateWorldMesh(&world,p);
 	}
 }
 
-unsigned int ray_block(Direction* dir,Vec v,Pos pos,unsigned int chunk_index){
+unsigned int ray_block(List* world,Direction* dir,Vec v,Pos pos,unsigned int chunk_index){
 	for(unsigned int i=0;i<100;i++){
 		Pos prev_pos = pos;
 		pos =(Pos)ADD_VEC(v,pos);
 		unsigned int ret;
-		if((ret=is_block(&world,pos,chunk_index))!=UINT_MAX){
+		if((ret=is_block(world,pos,chunk_index))!=UINT_MAX){
 			if(dir)*dir=hitDirectionBlock(prev_pos,
-					INDEX_TO_POS(&world,ret));
+					INDEX_TO_POS(world,ret));
 			return(ret);
 		}
 	}
 	return(UINT_MAX);
 }
 
-unsigned int ray_block_from_player(Direction* dir,Player p,unsigned int chunk_index){
+unsigned int ray_block_from_player(List* world,Direction* dir,Player p,unsigned int chunk_index){
 	Vec v = {0.5*sin(p.hor_angle)*cos(p.vert_angle), 0.5*sin(-p.vert_angle),
 		0.5*cos(p.hor_angle)*cos(p.vert_angle)};
-	return(ray_block(dir, v,p.pos,chunk_index));
+	return(ray_block(world,dir, v,p.pos,chunk_index));
 }
 
 //Gives the distance of x to [a,b] where a<=b
@@ -121,357 +120,317 @@ float distanceInterval(float x,float a,float b){
 }
 extern ALLEGRO_DISPLAY* display;
 
-void minecraft()
-{
+extern int screen_width;
+extern int screen_height;
 
-	ALLEGRO_TIMER *timer;
-	ALLEGRO_EVENT_QUEUE *queue;
-	ALLEGRO_BITMAP *display_2d;
-	ALLEGRO_BITMAP *bottem;
-	ALLEGRO_BITMAP *top;
-	ALLEGRO_BITMAP *side;
-   	ALLEGRO_FONT* font;
-	
-	
-	Player player={0,0,{0,25,0},UINT_MAX,true,0};
-	bool redraw = false;
-	bool quit = false;
-	bool fullscreen = false;
-	bool background = false;
-	int display_flags = ALLEGRO_RESIZABLE;
 
+//TODO: Create this function
+//void drawText(Minecraft* minecraft){
+//	
+//}
+
+void drawMinecraft(Minecraft* minecraft){
 	const char walkingStr[] ="Walking";
 	const char flyingStr[] = "Flying";
-	bool flying = false;
-	
-	
-	if (!al_init()) {
-		printf("Could not init Allegro.\n");
-		exit(1);
-	}
-	al_init_image_addon();
-   	al_init_font_addon();
+   	ALLEGRO_FONT* font;
 	font = al_create_builtin_font();
+	ALLEGRO_BITMAP* display_2d;
+	display_2d = al_create_sub_bitmap(al_get_backbuffer(display), 0, 0,
+	     	   screen_width, screen_height);
+	al_set_target_backbuffer(display);
+	al_set_render_state(ALLEGRO_DEPTH_TEST, 1);
+	al_clear_to_color(al_map_rgb_f(0, 0, 0));
+	al_clear_depth_buffer(1000);
 	
-	unsigned int standing_on = UINT_MAX;
-	al_init_primitives_addon();
-	al_install_keyboard();
-	al_install_mouse();
+	set_perspective_transform(al_get_backbuffer(display),minecraft->player);
+	draw_world(&(minecraft->world),minecraft->visibleChunks,&(minecraft->player));
 	
+	display_2d = al_create_sub_bitmap(al_get_backbuffer(display), 0, 0,
+		al_get_display_width(display), al_get_display_height(display));
+	al_set_target_bitmap(display_2d);
+	
+	int width2d = al_get_bitmap_width(display_2d);
+	int height2d = al_get_bitmap_height(display_2d);
+
+	//draw hotbar
+	int hotbarHeight = width2d/2/9;
+	ALLEGRO_BITMAP* icon;
+	al_set_target_bitmap(display_2d);
+	
+	ALLEGRO_TRANSFORM I;
+	al_identity_transform(&I);
+	al_use_transform(&I);
+
+	al_draw_rectangle(width2d/2-10,height2d/2-10,
+			width2d/2+10, height2d/2+10, al_map_rgb_f(1, 1, 1), 2);
+	
+	drawHotbar(width2d/4,height2d-hotbarHeight,width2d/2,hotbarHeight,minecraft->hotbarSelect,minecraft->hotbar);
+	
+	char info_str[100];
+	const char* walking_or_flyingStr;
+	if(minecraft->player.flying)walking_or_flyingStr=flyingStr;
+	else walking_or_flyingStr=walkingStr;
+	sprintf(info_str, "Position: %f, %f, %f, (%s mode)", minecraft->player.pos.x,
+			minecraft->player.pos.y, minecraft->player.pos.z,walking_or_flyingStr);
+	al_draw_text(font, al_map_rgb_f(1, 1, 1), 0, 0, 0,
+		info_str);
+	
+	al_destroy_bitmap(display_2d);
+	
+}
+
+void handleMinecraft(Minecraft* minecraft, ALLEGRO_EVENT* event){
+
+	//TODO: See if this can be only run if it is a ALLEGRO_EVENT_TIMER
+	if(!minecraft->player.flying){
+	Pos new_pos = minecraft->player.pos;
+	new_pos.y+=minecraft->player.vert_speed/FRAMERATE;
+	Pos foot;
+	foot=new_pos;
+	foot.y-=1.8;
+	unsigned int b= is_block(&(minecraft->world),foot,minecraft->player.chunk_index);
+	if(b==UINT_MAX/*TODO: Give a name that is easier to understand*/){
+		Pos prev_block_pos;
+		if(!minecraft->player.falling)
+			prev_block_pos = INDEX_TO_POS(&(minecraft->world),minecraft->player.standing_on);
+		if(	minecraft->player.standing_on==UINT_MAX ||
+			WORLD_BLOCK_INDEX(&(minecraft->world),minecraft->player.standing_on)==AIR
+			|| minecraft->player.falling
+			//check if the player is still standing on a block
+			|| distanceInterval(minecraft->player.pos.x,prev_block_pos.x,
+				prev_block_pos.x+1.0)>0.5 
+			|| distanceInterval(minecraft->player.pos.z,prev_block_pos.z,
+					prev_block_pos.z+1.0)>0.5){
+
+
+			minecraft->player.falling=true;
+			minecraft->player.pos.y+=minecraft->player.vert_speed;
+		}
+	}
+	else{
+		minecraft->player.standing_on=b;
+		minecraft->player.falling=false;
+		minecraft->player.pos.y=ceilf(minecraft->player.pos.y-1.8)+1.8;
+		minecraft->player.vert_speed=0;
+	}
+	if(minecraft->player.falling)minecraft->player.vert_speed+=GRAVITY/FRAMERATE;
+	}
+	
+		
+#define KEY_SEEN     1
+#define KEY_RELEASED 2
+	switch (event->type) {
+		case ALLEGRO_EVENT_DISPLAY_CLOSE:
+			exit(0);
+		case ALLEGRO_EVENT_DISPLAY_RESIZE:
+			al_acknowledge_resize(display);
+			break;
+		case ALLEGRO_EVENT_MOUSE_AXES:
+			//wraps the mouse around if necessary
+			if(event->mouse.x<0.1*SCREEN_WIDTH)
+				al_set_mouse_xy(display,0.9*SCREEN_WIDTH,
+						event->mouse.y);
+			else if(event->mouse.x>0.9*SCREEN_WIDTH)
+				al_set_mouse_xy(display,
+						0.1*SCREEN_WIDTH,
+						event->mouse.y);
+			else{
+				minecraft->player.hor_angle +=
+					(event->mouse.dx)*2*
+					ALLEGRO_PI/SCREEN_WIDTH;
+				minecraft->player.vert_angle += 
+					(event->mouse.dy)*
+					ALLEGRO_PI/SCREEN_HEIGHT;
+				if(minecraft->player.vert_angle>ALLEGRO_PI/2)
+					minecraft->player.vert_angle=ALLEGRO_PI/2;
+				if(minecraft->player.vert_angle<-ALLEGRO_PI/2)
+					minecraft->player.vert_angle=-ALLEGRO_PI/2;
+	      		}
+			minecraft->hotbarSelect-=event->mouse.dz;
+			if(minecraft->hotbarSelect<0)minecraft->hotbarSelect=0;
+			if(minecraft->hotbarSelect==9)minecraft->hotbarSelect=8;
+			minecraft->block_selection=minecraft->hotbarSelect;
+			break;
+	  	case ALLEGRO_EVENT_KEY_UP:
+			minecraft->key[event->keyboard.keycode] &= KEY_RELEASED;
+			break;
+	   	case ALLEGRO_EVENT_KEY_DOWN:
+			minecraft->key[event->keyboard.keycode] = KEY_SEEN | KEY_RELEASED;
+	      		switch (event->keyboard.keycode) {
+				//TODO: Ensure that this is handled
+				//in the main loop
+	  	    		//case ALLEGRO_KEY_ESCAPE:
+				//	exit(0);
+	  	    		//case ALLEGRO_KEY_F11:
+	  	       		//	fullscreen = !fullscreen;
+				//	al_set_display_flag(display,
+				//		ALLEGRO_FULLSCREEN_WINDOW,
+	  			//       		fullscreen);
+				//	break;
+				case ALLEGRO_KEY_1:
+					minecraft->block_selection=GRASS_BLOCK;
+					minecraft->hotbarSelect = 0;
+					break;
+				case ALLEGRO_KEY_2:
+					minecraft->block_selection=DIRT_BLOCK;
+					minecraft->hotbarSelect = 1;
+					break;
+				case ALLEGRO_KEY_3:
+					minecraft->block_selection=COBBLESTONE_BLOCK;
+					minecraft->hotbarSelect = 2;
+					break;
+				case ALLEGRO_KEY_4:
+					minecraft->block_selection=OAK_PLANKS_BLOCK;
+					minecraft->hotbarSelect = 3;
+					break;
+				case ALLEGRO_KEY_5:
+					minecraft->block_selection=OAK_LOG_BLOCK;
+					minecraft->hotbarSelect = 4;
+					break;
+				case ALLEGRO_KEY_6:
+					minecraft->block_selection=STONE_BLOCK;
+					minecraft->hotbarSelect = 5;
+					break;
+				case ALLEGRO_KEY_7:
+					minecraft->block_selection=OAK_LEAVES_BLOCK;
+					minecraft->hotbarSelect = 6;
+					break;
+				case ALLEGRO_KEY_8:
+					minecraft->block_selection=GLASS_BLOCK;
+					minecraft->hotbarSelect = 7;
+					break;
+				case ALLEGRO_KEY_9:
+					minecraft->block_selection=WATER_BLOCK;
+					minecraft->hotbarSelect = 8;
+					break;
+				case ALLEGRO_KEY_K:
+					minecraft->player.vert_speed=0;
+					minecraft->player.flying=!minecraft->player.flying;
+					break;
+				case ALLEGRO_KEY_O:
+					FILE* f= fopen("world.bin","w");
+					saveWorld(f,&(minecraft->world));
+					fclose(f);
+					break;
+				case ALLEGRO_KEY_SPACE:
+					if(!minecraft->player.flying){
+						if(minecraft->player.falling)break;
+						minecraft->player.falling=true;
+						minecraft->player.vert_speed=0.15;
+					}
+					break;
+	      		}
+	      		break;
+		case ALLEGRO_EVENT_MOUSE_BUTTON_DOWN:
+	      		Direction dir;
+			unsigned int block_index = ray_block_from_player(&(minecraft->world),&dir,minecraft->player,
+					minecraft->player.chunk_index);
+			if(block_index==UINT_MAX)break;
+			Pos block = INDEX_TO_POS(&(minecraft->world),block_index);
+			switch(event->mouse.button){
+				case 2:
+					if(dir==NoDirection)break;
+					int chunk_index = getChunk(&(minecraft->world),
+						POS_TO_CHUNK_POS(adjacentPos(block,dir)),
+						block_index/MAX_CHUNK_BlOCKS
+					);
+					ChunkPos p =worldl(&(minecraft->world))[chunk_index].pos;
+					block_index = POS_TO_INDEX((&(minecraft->world)),
+						adjacentPos(block,dir), 
+						chunk_index
+					);
+					int player_block_index = POS_TO_INDEX(
+						(&(minecraft->world)),minecraft->player.pos,chunk_index);
+					
+					Pos feet_pos = adjacentPos(minecraft->player.pos,Bottem);
+
+					int feet_block_index = POS_TO_INDEX(
+						(&(minecraft->world)),feet_pos,chunk_index);
+					if(player_block_index==block_index
+						||feet_block_index==block_index)break;
+
+					setBlock(&(minecraft->world),block_index,chunk_index,
+							minecraft->block_selection);
+					break;
+				case 1://break block
+					setBlock(&(minecraft->world),block_index,
+							block_index/MAX_CHUNK_BlOCKS,AIR);
+					break;
+			}
+			////ChunkPos playerChunkPos = POS_TO_CHUNK_POS(player.pos);
+			//ChunkPos blockChunkPos =POS_TO_CHUNK_POS(block);
+			////int i = (blockChunkPos.x-playerChunkPos.x+WORLD_CHUNKS)*
+			////	(2*WORLD_CHUNKS+1)+
+			////	(blockChunkPos.z-playerChunkPos.z+WORLD_CHUNKS);
+			//int block_chunk = getChunk(&world,blockChunkPos,player.chunk_index);
+			//
+			//Chunk* chunk = &(worldl(&world)[block_chunk]);
+			////List* mesh = &(worldl(&world)[block_chunk].mesh);
+
+			break;
+		case ALLEGRO_EVENT_TIMER:
+			float speed;
+			if(minecraft->player.flying)speed = FLYING_SPEED;
+			else speed = WALKING_SPEED;
+	      		if(minecraft->key[ALLEGRO_KEY_W]){
+				move(minecraft,speed/FRAMERATE,&(minecraft->player),0,!minecraft->player.flying);
+			}
+	  		else if(minecraft->key[ALLEGRO_KEY_S])
+	  			move(minecraft,speed/FRAMERATE,&(minecraft->player),ALLEGRO_PI,!minecraft->player.flying);
+	  		else if(minecraft->key[ALLEGRO_KEY_D]){
+	  			move(minecraft,speed/FRAMERATE,&(minecraft->player),ALLEGRO_PI/2,!minecraft->player.flying);
+			}
+	  		else if(minecraft->key[ALLEGRO_KEY_A])
+	  			move(minecraft,speed/FRAMERATE,&(minecraft->player),-ALLEGRO_PI/2,!minecraft->player.flying);
+	      		if(minecraft->key[ALLEGRO_KEY_SPACE]&&minecraft->player.flying){
+				minecraft->player.pos.y+=20.0/FRAMERATE;
+	      		}
+	      		if(minecraft->key[ALLEGRO_KEY_LSHIFT]||minecraft->key[ALLEGRO_KEY_LSHIFT]){
+				if(minecraft->player.flying)minecraft->player.pos.y-=20.0/FRAMERATE;
+	      		}
+	      		int i=0;
+	      		while(i < ALLEGRO_KEY_MAX){
+	      			minecraft->key[i] &= KEY_SEEN;
+	      			i++;
+	      		}
+			break;
+	}
+}
+		
+
+void initPlayer(Player* p){
+	p->hor_angle = 0;
+	p->vert_angle = 0;
+	p->pos.x=0;
+	p->pos.y=25;
+	p->pos.z=0;
+	p->chunk_index=UINT_MAX;
+	p->flying=false;
+	p->falling=true;
+	p->vert_speed=0;
+	p->standing_on=UINT_MAX;
+}
+
+void initMinecraft(Minecraft* minecraft){
+	initPlayer(&(minecraft->player));
 	al_hide_mouse_cursor(display);
 	al_grab_mouse(display);
 	al_set_mouse_xy(display,SCREEN_WIDTH/2,SCREEN_HEIGHT/2);
-	if (!display) {
-	   printf("Error creating display\n");
-	   exit(1);
-	}
-	
-	display_2d = al_create_sub_bitmap(al_get_backbuffer(display), 0, 0,
-	     	   SCREEN_WIDTH, SCREEN_HEIGHT);
-	
-	timer = al_create_timer(1.0 / FRAMERATE);
-	
-	queue = al_create_event_queue();
-	al_register_event_source(queue, al_get_keyboard_event_source());
-	al_register_event_source(queue, al_get_mouse_event_source());
-	al_register_event_source(queue, al_get_display_event_source(display));
-	al_register_event_source(queue, al_get_timer_event_source(timer));
 
-#define KEY_SEEN     1
-#define KEY_RELEASED 2
-	unsigned char key[ALLEGRO_KEY_MAX];
-	memset(key, 0, sizeof(key));
-	
 	FILE* f = fopen("world.bin","r");
 	if(f){
-		loadWorld(f,&world);
+		loadWorld(f,&(minecraft->world));
 	}else{
-		world= list_init(0);
+		minecraft->world= list_init(0);
 	}
-	//for(int i =0;i<(2*WORLD_CHUNKS+1)*(2*WORLD_CHUNKS+1);i++)
-	//	worldMesh[i] = list_init(0);
-	
-	loadBlocks();
-	int hotbarSelect = 0;
-	BlockTypeEnum hotbar[9];
+	minecraft->hotbarSelect = 0;
 	for(int i=0;i<9;i++){
-		hotbar[i]=i;
+		minecraft->hotbar[i]=i;
 	}
-	BlockTypeEnum block_selection=DIRT_BLOCK;
+	minecraft->block_selection=DIRT_BLOCK;
+	loadChunks(&(minecraft->world),minecraft->visibleChunks,minecraft->player);
+
+	memset(minecraft->key, 0, sizeof(minecraft->key));
 	
-	loadChunks(&world,visibleChunks, player);
-	//createWorldMesh(&world,worldMesh,&player);
-	
-	al_start_timer(timer);
-	while (!quit) {
-
-		if(!flying){
-		Pos new_pos = player.pos;
-		new_pos.y+=player.vert_speed/FRAMERATE;
-
-		Pos foot;
-		foot=new_pos;
-		foot.y-=1.8;
-		unsigned int b= is_block(&world,foot,player.chunk_index);
-		if(b==UINT_MAX){
-			Pos prev_block_pos;
-			if(!player.falling)
-				prev_block_pos = INDEX_TO_POS(&world,standing_on);
-			if(	standing_on==UINT_MAX ||
-				WORLD_BLOCK_INDEX(&world,standing_on)==AIR
-				|| player.falling
-				//check if the player is still standing on a block
-				|| distanceInterval(player.pos.x,prev_block_pos.x,
-					prev_block_pos.x+1.0)>0.5 
-				|| distanceInterval(player.pos.z,prev_block_pos.z,
-						prev_block_pos.z+1.0)>0.5){
-
-
-				player.falling=true;
-				player.pos.y+=player.vert_speed;
-			}
-		}
-		else{
-			standing_on=b;
-			player.falling=false;
-			player.pos.y=ceilf(player.pos.y-1.8)+1.8;
-			player.vert_speed=0;
-		}
-		if(player.falling)player.vert_speed+=GRAVITY/FRAMERATE;
-		}
-		ALLEGRO_EVENT event;
-		
-		al_wait_for_event(queue, &event);
-		switch (event.type) {
-			case ALLEGRO_EVENT_DISPLAY_CLOSE:
-				exit(0);
-			case ALLEGRO_EVENT_DISPLAY_RESIZE:
-				al_acknowledge_resize(display);
-				break;
-			case ALLEGRO_EVENT_MOUSE_AXES:
-				//wraps the mouse around if necessary
-				if(event.mouse.x<0.1*SCREEN_WIDTH)
-					al_set_mouse_xy(display,0.9*SCREEN_WIDTH,
-							event.mouse.y);
-				else if(event.mouse.x>0.9*SCREEN_WIDTH)
-					al_set_mouse_xy(display,
-							0.1*SCREEN_WIDTH,
-							event.mouse.y);
-				else{
-					player.hor_angle +=
-						(event.mouse.dx)*2*
-						ALLEGRO_PI/SCREEN_WIDTH;
-					player.vert_angle += 
-						(event.mouse.dy)*
-						ALLEGRO_PI/SCREEN_HEIGHT;
-					if(player.vert_angle>ALLEGRO_PI/2)
-						player.vert_angle=ALLEGRO_PI/2;
-					if(player.vert_angle<-ALLEGRO_PI/2)
-						player.vert_angle=-ALLEGRO_PI/2;
-		      		}
-				hotbarSelect-=event.mouse.dz;
-				if(hotbarSelect<0)hotbarSelect=0;
-				if(hotbarSelect==9)hotbarSelect=8;
-				block_selection=hotbarSelect;
-				break;
-		  	case ALLEGRO_EVENT_KEY_UP:
-				key[event.keyboard.keycode] &= KEY_RELEASED;
-				break;
-		   	case ALLEGRO_EVENT_KEY_DOWN:
-				key[event.keyboard.keycode] = KEY_SEEN | KEY_RELEASED;
-		      		switch (event.keyboard.keycode) {
-		  	    		case ALLEGRO_KEY_ESCAPE:
-						exit(0);
-		  	    		case ALLEGRO_KEY_F11:
-		  	       			fullscreen = !fullscreen;
-						al_set_display_flag(display,
-							ALLEGRO_FULLSCREEN_WINDOW,
-		  			       		fullscreen);
-						break;
-					case ALLEGRO_KEY_1:
-						block_selection=GRASS_BLOCK;
-						hotbarSelect = 0;
-						break;
-					case ALLEGRO_KEY_2:
-						block_selection=DIRT_BLOCK;
-						hotbarSelect = 1;
-						break;
-					case ALLEGRO_KEY_3:
-						block_selection=COBBLESTONE_BLOCK;
-						hotbarSelect = 2;
-						break;
-					case ALLEGRO_KEY_4:
-						block_selection=OAK_PLANKS_BLOCK;
-						hotbarSelect = 3;
-						break;
-					case ALLEGRO_KEY_5:
-						block_selection=OAK_LOG_BLOCK;
-						hotbarSelect = 4;
-						break;
-					case ALLEGRO_KEY_6:
-						block_selection=STONE_BLOCK;
-						hotbarSelect = 5;
-						break;
-					case ALLEGRO_KEY_7:
-						block_selection=OAK_LEAVES_BLOCK;
-						hotbarSelect = 6;
-						break;
-					case ALLEGRO_KEY_8:
-						block_selection=GLASS_BLOCK;
-						hotbarSelect = 7;
-						break;
-					case ALLEGRO_KEY_9:
-						block_selection=WATER_BLOCK;
-						hotbarSelect = 8;
-						break;
-					case ALLEGRO_KEY_K:
-						player.vert_speed=0;
-						flying=!flying;
-						break;
-					case ALLEGRO_KEY_O:
-						FILE* f= fopen("world.bin","w");
-						saveWorld(f,&world);
-						fclose(f);
-						break;
-					case ALLEGRO_KEY_SPACE:
-						if(!flying){
-							if(player.falling)break;
-							player.falling=true;
-							player.vert_speed=0.15;
-						}
-						break;
-		      		}
-		      		break;
-			case ALLEGRO_EVENT_MOUSE_BUTTON_DOWN:
-		      		Direction dir;
-				unsigned int block_index = ray_block_from_player(&dir,player,
-						player.chunk_index);
-				if(block_index==UINT_MAX)break;
-				Pos block = INDEX_TO_POS(&world,block_index);
-				switch(event.mouse.button){
-					case 2:
-						if(dir==NoDirection)break;
-						int chunk_index = getChunk(&world,
-							POS_TO_CHUNK_POS(adjacentPos(block,dir)),
-							block_index/MAX_CHUNK_BlOCKS
-						);
-						ChunkPos p =worldl(&world)[chunk_index].pos;
-						block_index = POS_TO_INDEX((&world),
-							adjacentPos(block,dir), 
-							chunk_index
-						);
-						int player_block_index = POS_TO_INDEX(
-							(&world),player.pos,chunk_index);
-						
-						Pos feet_pos = adjacentPos(player.pos,Bottem);
-
-						int feet_block_index = POS_TO_INDEX(
-							(&world),feet_pos,chunk_index);
-						if(player_block_index==block_index
-							||feet_block_index==block_index)break;
-
-						setBlock(&world,block_index,chunk_index,
-								block_selection);
-						break;
-					case 1://break block
-						setBlock(&world,block_index,
-								block_index/MAX_CHUNK_BlOCKS,AIR);
-						break;
-				}
-				////ChunkPos playerChunkPos = POS_TO_CHUNK_POS(player.pos);
-				//ChunkPos blockChunkPos =POS_TO_CHUNK_POS(block);
-				////int i = (blockChunkPos.x-playerChunkPos.x+WORLD_CHUNKS)*
-				////	(2*WORLD_CHUNKS+1)+
-				////	(blockChunkPos.z-playerChunkPos.z+WORLD_CHUNKS);
-				//int block_chunk = getChunk(&world,blockChunkPos,player.chunk_index);
-				//
-				//Chunk* chunk = &(worldl(&world)[block_chunk]);
-				////List* mesh = &(worldl(&world)[block_chunk].mesh);
-
-				break;
-			case ALLEGRO_EVENT_TIMER:
-				redraw = true;
-				float speed;
-				if(flying)speed = FLYING_SPEED;
-				else speed = WALKING_SPEED;
-		      		if(key[ALLEGRO_KEY_W])move(speed/FRAMERATE,&player,0,!flying);
-		  		else if(key[ALLEGRO_KEY_S])
-		  			move(speed/FRAMERATE,&player,ALLEGRO_PI,!flying);
-		  		else if(key[ALLEGRO_KEY_D]){
-		  			move(speed/FRAMERATE,&player,ALLEGRO_PI/2,!flying);
-				}
-		  		else if(key[ALLEGRO_KEY_A])
-		  			move(speed/FRAMERATE,&player,-ALLEGRO_PI/2,!flying);
-		      		if(key[ALLEGRO_KEY_SPACE]&&flying){
-					player.pos.y+=20.0/FRAMERATE;
-		      		}
-		      		if(key[ALLEGRO_KEY_LSHIFT]||key[ALLEGRO_KEY_LSHIFT]){
-					if(flying)player.pos.y-=20.0/FRAMERATE;
-		      		}
-		      		int i=0;
-		      		while(i < ALLEGRO_KEY_MAX){
-		      			key[i] &= KEY_SEEN;
-		      			i++;
-		      		}
-				break;
-		   	case ALLEGRO_EVENT_DISPLAY_HALT_DRAWING:
-		   		background = true;
-		   		al_acknowledge_drawing_halt(display);
-		   		al_stop_timer(timer);
-		   		break;
-		   	case ALLEGRO_EVENT_DISPLAY_RESUME_DRAWING:
-		   		background = false;
-		   		al_acknowledge_drawing_resume(display);
-		    		al_start_timer(timer);
-		   		break;
-		}
-		int i = 0;
-		if (!background && redraw && al_is_event_queue_empty(queue)) {
-			
-			al_set_target_backbuffer(display);
-			al_set_render_state(ALLEGRO_DEPTH_TEST, 1);
-			al_clear_to_color(al_map_rgb_f(0, 0, 0));
-			al_clear_depth_buffer(1000);
-			
-			set_perspective_transform(al_get_backbuffer(display),player);
-			draw_world(&world,visibleChunks,&player);
-			
-			display_2d = al_create_sub_bitmap(al_get_backbuffer(display), 0, 0,
-				al_get_display_width(display), al_get_display_height(display));
-			al_set_target_bitmap(display_2d);
-			
-			int width2d = al_get_bitmap_width(display_2d);
-			int height2d = al_get_bitmap_height(display_2d);
-
-			//draw hotbar
-			int hotbarHeight = width2d/2/9;
-			ALLEGRO_BITMAP* icon;
-			al_set_target_bitmap(display_2d);
-			
-			ALLEGRO_TRANSFORM I;
-			al_identity_transform(&I);
-			al_use_transform(&I);
-
-			al_draw_rectangle(width2d/2-10,height2d/2-10,
-			       		width2d/2+10, height2d/2+10, al_map_rgb_f(1, 1, 1), 2);
-			
-			drawHotbar(width2d/4,height2d-hotbarHeight,width2d/2,hotbarHeight,hotbarSelect,hotbar);
-			
-			char info_str[100];
-			const char* walking_or_flyingStr;
-			if(flying)walking_or_flyingStr=flyingStr;
-			else walking_or_flyingStr=walkingStr;
-			sprintf(info_str, "Position: %f, %f, %f, (%s mode)", player.pos.x,
-					player.pos.y, player.pos.z,walking_or_flyingStr);
-         		al_draw_text(font, al_map_rgb_f(1, 1, 1), 0, 0, 0,
-                      		info_str);
-			
-			al_destroy_bitmap(display_2d);
-			
-			al_flip_display();
-			redraw = false;
-		}
-	}
-   	return;
 }
 // vim: cc=100 

@@ -13,7 +13,7 @@
 default: main
 
 libs=-lallegro -lallegro_font -lallegro_ttf -lallegro_primitives -lm -lallegro_image -lallegro_dialog
-CFLAGS=$(libs)  -g3 -gdwarf-2
+CFLAGS=$(libs)  -g3 -gdwarf-2 -Wfatal-errors
 
 main: main.c minecraft.o world.o block.o list.o gui.o
 gui: gui.c gui.h

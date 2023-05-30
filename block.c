@@ -26,7 +26,6 @@ void set_other_transform(ALLEGRO_BITMAP* bmp)
 void createIcon(ALLEGRO_BITMAP** bmp, BlockTypeEnum type,int width,int height){
 	*bmp = al_create_bitmap(width,height);
 	al_set_target_bitmap(*bmp);
-	al_set_render_state(ALLEGRO_DEPTH_TEST, 1);
 	al_clear_to_color(al_map_rgba_f(0,0,0,0));
 	al_clear_depth_buffer(1000);
 	set_other_transform(*bmp);
@@ -280,6 +279,7 @@ Direction hitDirectionBlock(Pos prev_pos, Pos block_pos){
 
 
 void drawHotbar(float x,float y,float width,float height,int select,BlockTypeEnum* hotbar){
+	al_save_bitmap("water2.png",blockTypes[8].bmp);
 	float selectX1 = x+height*select;
 	float selectX2 = selectX1+height;
 	al_draw_rectangle(selectX1,y,selectX2,y+height,

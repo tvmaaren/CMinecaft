@@ -18,8 +18,10 @@ typedef struct{
 	float vert_angle;
 	Pos pos;
 	unsigned int chunk_index;
+	bool flying;
 	bool falling;
 	float vert_speed;//only used when falling
+	unsigned int standing_on;
 }Player;
 
 #define ADD_VEC(v,w) (Pos){v.x+w.x,v.y+w.y,v.z+w.z}
